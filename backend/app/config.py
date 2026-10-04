@@ -28,4 +28,7 @@ MIN_RATING: float = float(os.getenv("MIN_RATING", "3.8"))
 # always be traced back to the version that produced it.
 MODEL_VERSION: str = os.getenv("MODEL_VERSION", "v2-matrix-rules")
 
-CORS_ORIGINS = os.getenv("CORS_ORIGINS", "http://localhost:3000").split(",")
+CORS_ORIGINS = os.getenv(
+    "CORS_ORIGINS",
+    "http://localhost:3000,https://meesho-cfe.vercel.app",
+).split(",")
