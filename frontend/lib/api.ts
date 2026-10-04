@@ -162,6 +162,7 @@ export const session = {
   get: (): string | null =>
     typeof window === 'undefined' ? null : window.localStorage.getItem(KEY),
   set: (id: string) => window.localStorage.setItem(KEY, id),
+  clear: () => window.localStorage.removeItem(KEY),
 };
 
 export const fmt = {
