@@ -1,0 +1,205 @@
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+  Creator × Product Fit Engine — the DICE look: white space, one hot pink,
+  deep plum for type, and the deck's pastel gradient used sparingly.
+
+  Pink marks the thing to act on or the live value. Everything else stays quiet
+  so a product photo and a fit score are what the eye finds first.
+*/
+
+:root {
+  --ink: #2a1530;          /* plum-black: text */
+  --ink-2: #624e6b;        /* secondary text */
+  --ink-3: #9a8ca3;        /* tertiary / labels */
+  --canvas: #fffbfd;       /* page */
+  --surface: #ffffff;
+  --line: #f1e6ed;
+  --line-strong: #e3d3dd;
+  --plum: #510e44;
+  --plum-lift: #6d1a5c;
+  --signal: #e8195f;       /* primary action, live values */
+  --signal-wash: #fff0f5;
+  --orange: #f28c1c;
+  --purple: #7b4fe0;
+  --yellow: #f5b921;
+  --green: #0e9f6e;
+  --blue: #1f6fd0;
+
+  --grad: linear-gradient(100deg, #ffd9e6 0%, #ffe8cc 48%, #e6dcff 100%);
+
+  /* Chart series. Two only, validated for colour-vision separation. */
+  --series-1: #e8195f;
+  --series-2: #1f6fd0;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--canvas);
+  color: var(--ink);
+  font-family: 'Poppins', ui-sans-serif, system-ui, sans-serif;
+  font-variant-numeric: tabular-nums;
+  -webkit-font-smoothing: antialiased;
+}
+
+::selection {
+  background: var(--signal-wash);
+}
+
+:focus-visible {
+  outline: 2px solid var(--signal);
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+
+@layer components {
+  /* ---- panels: hairline-bordered, header-differentiated, never shadowed ---- */
+  .panel {
+    @apply rounded-2xl border border-[var(--line)] bg-[var(--surface)];
+  }
+
+  .panel-head {
+    @apply flex items-center justify-between gap-3 border-b border-[var(--line)] px-4 py-3;
+  }
+
+  .panel-title {
+    @apply text-[13px] font-semibold tracking-[-0.01em] text-[var(--ink)];
+  }
+
+  .panel-note {
+    @apply text-[12px] leading-relaxed text-[var(--ink-3)];
+  }
+
+  /* ---- buttons ---- */
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-full border border-transparent
+           bg-[var(--signal)] px-4 py-2 text-[13px] font-semibold text-white
+           transition-colors hover:bg-[#cf1454] disabled:cursor-not-allowed disabled:opacity-45;
+  }
+
+  .btn-quiet {
+    @apply inline-flex items-center justify-center gap-2 rounded-full border border-[var(--line-strong)]
+           bg-[var(--surface)] px-4 py-2 text-[13px] font-semibold text-[var(--ink)]
+           transition-colors hover:border-[var(--signal)] hover:text-[var(--signal)]
+           disabled:cursor-not-allowed disabled:opacity-45;
+  }
+
+  .btn-sm {
+    @apply px-2.5 py-1.5 text-[12px];
+  }
+
+  /* ---- data tables ---- */
+  .dt {
+    @apply w-full border-collapse text-[13px];
+  }
+
+  .dt thead th {
+    @apply border-b border-[var(--line)] px-3 py-2 text-left text-[11.5px] font-semibold
+           text-[var(--ink-3)];
+  }
+
+  .dt tbody td {
+    @apply border-b border-[var(--line)] px-3 py-2.5 align-middle;
+  }
+
+  .dt tbody tr:last-child td {
+    @apply border-b-0;
+  }
+
+  .num {
+    @apply text-right tabular-nums;
+  }
+
+  /* ---- chips ---- */
+  .chip {
+    @apply inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border
+           border-[var(--line)] bg-[var(--surface)] px-2.5 py-1 text-[12px]
+           font-medium text-[var(--ink-2)];
+  }
+
+  .chip-code {
+    @apply inline-flex items-center whitespace-nowrap rounded-full border border-[#c6e4d3]
+           bg-[#eaf7f0] px-2.5 py-[3px] text-[11px] font-medium text-[#0b6b43];
+  }
+
+  .mono {
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* ---- product cards ---- */
+  .card {
+    @apply overflow-hidden rounded-2xl border border-[var(--line)] bg-white
+           transition-[box-shadow,transform,border-color] duration-200;
+  }
+  .card-hover:hover {
+    border-color: #f3c3d6;
+    box-shadow: 0 10px 28px -12px rgba(232, 25, 95, 0.28);
+    transform: translateY(-2px);
+  }
+
+  .tab {
+    @apply relative px-1 pb-3 pt-2 text-[13px] font-medium text-[var(--ink-3)] transition-colors
+           hover:text-[var(--ink)];
+  }
+  .tab[aria-current='page'] {
+    @apply font-semibold text-[var(--plum)];
+  }
+  .tab[aria-current='page']::after {
+    content: '';
+    @apply absolute inset-x-0 -bottom-px h-[2px] rounded-full bg-[var(--signal)];
+  }
+
+  /* ---- meters ---- */
+  .meter {
+    @apply relative h-[6px] w-full overflow-hidden rounded-full bg-[#ece7ee];
+  }
+
+  .meter > i {
+    @apply absolute inset-y-0 left-0 rounded-full;
+    transition: width 420ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  .field {
+    @apply w-full rounded-xl border border-[var(--line-strong)] bg-white px-3.5 py-2.5
+           text-[13px] text-[var(--ink)] outline-none focus:border-[var(--signal)];
+  }
+
+  .field-label {
+    @apply mb-1.5 block text-[12px] font-semibold text-[var(--ink-2)];
+  }
+}
+
+/* Thin scrollbars so dense panels keep their proportions. */
+*::-webkit-scrollbar {
+  width: 9px;
+  height: 9px;
+}
+*::-webkit-scrollbar-thumb {
+  background: #ecd9e3;
+  border-radius: 99px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
