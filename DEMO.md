@@ -1,48 +1,93 @@
-# Demo script and deployment checklist
+# Application Walkthrough & Demo Guide
 
-## Before judging (5 minutes)
+This guide walks through the core user journeys of the **Creator × Product Fit Engine (CFE)** across its three interfaces: Creator Workspace, Brand Matching, and the Engine Lab.
 
-1. Open https://meesho-bpc.onrender.com/health. The free host sleeps after about 15 minutes idle;
-   the first request wakes it (up to a minute). Do this again shortly before your slot.
-2. Open https://meesho-cfe.vercel.app/creator on a phone and on a laptop. You should land on
-   **Riya's Top 8** with the four-stop walkthrough at the top.
-3. Press **Reset demo** so the numbers match the slides (Sunscreen 85, Vitamin C 83, Ceramide 76).
-4. Scan each QR code in the exported PDF with two different phones.
+---
 
-Optional: point a free uptime monitor at `/health` every 10 minutes during the judging window so
-the backend never sleeps.
+## The 3 Core Journeys
 
-## The 60–90 second path (follows slides 7 and 8)
+### Journey 1: The Creator Experience (Discover & Adaptive Learning)
 
-| Time | Where | Do | Say |
-| --- | --- | --- | --- |
-| 0:00 | `/creator/onboard` (QR 1) | Start → tap Skincare routine, Product review, Makeup tutorial → Definitely → keep the ranking → pick Lip Tint ₹299, Sunscreen ₹349, Vitamin C ₹499 | "It never asks her goal. Four indirect questions, because Meesho already knows her tier, audience and content." |
-| 0:25 | DNA screen | Point at Trend 0.10 / Commerce 0.68 / Brand 0.22 and the Fetched / Asked tags; tick consent; See my Top 8 | "Every value says where it came from, and nothing is saved without consent." |
-| 0:40 | `/creator` (QR 2) | Top pick card: 85, three reasons, content angle, Fit Rewards line; open it | "164 listings, 25 pass the checks, Top 8 for a Growth creator. Here is why this one: Audience +24.0, Commerce +22.6, Product +14.3, and every check it passed." |
-| 1:00 | Ceramide Moisturiser card | Skip (with reason) → Too expensive | "The list re-ranks at once: Ceramide 76 → 73." |
-| 1:10 | Walkthrough stop 4 → `/brand/product/P009` | Show Riya at 73 and "Too expensive" under What creators did with it | "The brand sees the same score and, for the first time, why a creator passed." |
-| 1:25 | Reset demo | | "Back to the deck's numbers." |
+#### 1. Indirect Onboarding (`/creator/onboard`)
+* Navigate to `/creator/onboard` and connect a demo handle (e.g. `@riya.glows`).
+* Notice that the engine **never asks the creator for their business metrics or target revenue**.
+* Walk through the 4 indirect scenario taps:
+  1. *Content Formats*: Tap topics the creator actively produces (Skincare routine, Product reviews, Tutorials).
+  2. *Scenario Choice*: Choose what the creator prioritizes when a product is hot.
+  3. *Priority Ranking*: Order what matters most to their audience.
+  4. *Quick Product Picks*: Pick 3 everyday favorites to establish comfortable price points and brand aesthetics.
+* **Consent & DNA Review**: View the synthesized Creator DNA showing Intent distribution (Trend, Commerce, Brand) and explicit provenance tags (`Fetched`, `Asked`, `Default`). Check consent and proceed to the feed.
 
-If asked "what does slide 8's Fit Engine QR open?": onboarding, with the Fit Engine one tap away in
-the walkthrough. If asked about the A4 screens: they show seed creator Aditi Sharma's numbers (see
-README, Notes for reviewers).
+#### 2. The Personalized Feed (`/creator`)
+* Land on the creator's Discover feed (e.g. *Riya's Top 8* for a Growth Creator).
+* **Hero Recommendation Card**: Inspect the #1 pick (e.g., *Daily Sunscreen SPF 50*):
+  * **Fit Score badge** with color tone based on score strength.
+  * **Top Drivers**: Explicit point contributions (e.g., `Audience +24.0 · Commerce +22.6 · Product +14.3`).
+  * **Suggested Content Angle**: A creator-ready hook for social videos.
+  * **Fit Rewards Callout**: Highlight that this pick qualifies for Fit Rewards (Fit Score ≥ 80).
+* **Product Detail Drawer**: Click any card to open the slide-over drawer:
+  * Check the **Stage 1 Verification Checklist** (Stock, Price window, Rating, Returns, Policy, Audience fit).
+  * Review the mathematical score formula and signal breakdown bars.
 
-## Deploying without breaking the QR codes
+#### 3. Closed-Loop Feedback & Instant Re-ranking
+* On a recommendation (e.g., *Ceramide Moisturiser*), click **"Skip (with reason)"**.
+* Select a structured reason chip: **"Too expensive"**.
+* **Watch the Live Re-ranking Banner**:
+  * The feed recalculates immediately without full page reload.
+  * A banner appears showing the exact diff: the skipped item drops, related items adjust, and the explanation shows how the learning multiplier bounded the score adjustment.
 
-The printed QR codes contain these exact addresses:
-`https://meesho-cfe.vercel.app/creator` and `https://meesho-cfe.vercel.app/creator/onboard`.
+#### 4. Fit Rewards & Real-Time Order Accounting (`/creator/profile`)
+* Open `/creator/profile` and scroll down to the **Fit Rewards** panel.
+* View the creator archetype (*Commerce Builder*) and the rules: rewards unlock on delivered orders with Fit Score ≥ 80.
+* Click **`+ Delivered order`** on a promoted product: watch delivered orders increment and NMV increase.
+* Click **`Return`**: observe how return orders automatically net off against NMV, demonstrating return-conscious accounting.
 
-1. **Same Vercel project.** Deploy `frontend/` to the project that owns `meesho-cfe.vercel.app`.
-   `frontend/.vercel/project.json` is kept in this zip so `vercel --prod` from `frontend/` goes to
-   that project. If Vercel deploys from GitHub, just push. Never create a new project or rename
-   the domain.
-2. **Same Render service.** `frontend/.env.production` points at `https://meesho-bpc.onrender.com`.
-   Push the backend to the repo that service deploys from (or use the Render dashboard's manual
-   deploy). It reseeds a fresh SQLite database on start, so Riya and the deck's numbers appear.
-3. **Keep the two pages.** Do not move `frontend/app/creator/page.tsx` or
-   `frontend/app/creator/onboard/page.tsx`.
-4. **Check after deploying:** `/health` returns `"demo_creator_id": "C013"`; `/creator` shows
-   Riya's Top 8; `/creator/onboard` shows the walkthrough; the PDF's QR codes open both.
+---
 
-Git: this zip includes the repository (`.git`) with the changes uncommitted, so you can review
-them with `git status` / `git diff`, then commit and push to `Vapa1510/Meesho_BPC`.
+### Journey 2: The Brand Experience (Matching & Feedback Telemetry)
+
+#### 1. Product-to-Creator Matching (`/brand/product/P009`)
+* Switch to the **Brand Portal** and select any product.
+* View reachable creator matches ranked by fit score.
+* Inspect projected reach metrics: **Estimated Reach**, **Projected Orders**, and **Forecasted NMV**.
+* Expand unreachable creators to see why they were blocked (e.g. *Outside creator niche*, *Price band mismatch*).
+
+#### 2. Targeted Offers with Incentives
+* Click **"Send offer"** on a matching creator.
+* For fit-qualified creators (Fit Score ≥ 80), select an incentive chip:
+  * `Brand-funded sample`
+  * `Conversion bonus`
+  * `Early access` (for early/rising trend stage products)
+* Send the offer and check the Creator Offers inbox (`/creator/offers`) to see the incentive badge attached.
+
+#### 3. Seller Feedback Intelligence
+* Under **"What creators did with it"**, review real-time feedback summary:
+  * Total views, promotes, saves, and skips.
+  * Exact reasons given by creators when declining or skipping (e.g. *Too expensive*), providing sellers with market intelligence on their pricing and positioning.
+
+---
+
+### Journey 3: The Engine Lab (Inspection & Experimentation)
+
+#### 1. Pipeline Drop-Off Funnel (`/lab/pipeline`)
+* Open `/lab/pipeline` to inspect the 4 stages of the engine.
+* View the Stage 1 drop-off breakdown across all 8 hard filters (Category, Price range, Stock, Quality floor, Return rate median, Policy compliance, Excluded categories, Audience fit floor).
+
+#### 2. Team-Draft Interleaved Sandbox (`/lab/pilot`)
+* Open `/lab/pilot` to explore pilot evaluation.
+* View an interleaved feed blending personalized picks with generic discovery recommendations in a team-draft alternation.
+* Toggle **"Reveal the source"** to unmask which items were personalized vs. generic.
+* Review the live match-quality win rate tracking creator preference across both arms.
+
+#### 3. Trust & Quality Telemetry (`/lab/metrics`)
+* Review live ranking quality metrics:
+  * **NDCG@5** and **Precision@5**
+  * **Explanation Coverage** (percentage of served picks with human-readable rationale)
+  * **Wrong-Pick Rate** (percentage of recommendations skipped for fit reasons)
+  * **P95 Latency** monitoring response time under load.
+
+---
+
+## One-Click Demo Reset
+
+At any point during testing or demonstrations, click **"Reset demo"** in the top navigation banner (or call `POST /demo/reset`) to immediately restore all creators, catalogue listings, feedback events, and order counters to their clean baseline state.
