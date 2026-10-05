@@ -15,6 +15,7 @@ import { PageHeader } from '@/components/AppShell';
 import { useCreators } from '@/components/CreatorContext';
 import { DemoGuide } from '@/components/DemoGuide';
 import { SourceTag } from '@/components/DnaSummary';
+import { ProductImage } from '@/components/ui';
 import { api, imgSrc } from '@/lib/api';
 import type { DNA, FetchedProfile, OnboardingAnswers } from '@/lib/types';
 import { TOP_K_LABEL } from '@/lib/types';
@@ -253,8 +254,7 @@ export default function OnboardPage() {
       <>
         <Q text="A product sells well every week but isn’t trending anymore. Would you still promote it?" />
         <div className="mb-4 flex items-center gap-3 rounded-2xl bg-[#faf6f9] p-3">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={imgSrc('/product/P001/image.svg')} alt="" className="h-[78px] w-[78px] rounded-xl object-cover" />
+          <ProductImage src="/product/P001/image.svg" alt="Vitamin C Serum" className="h-[78px] w-[78px] rounded-xl" />
           <div>
             <p className="text-[13px] font-semibold">Vitamin C Serum</p>
             <p className="text-[11.5px] text-[var(--ink-3)]">★ 4.4 · 120 orders / week</p>
@@ -309,8 +309,7 @@ export default function OnboardPage() {
             return (
               <button key={p.product_id} onClick={() => toggle('q4', p.product_id, 3)}
                 className={`relative flex items-center gap-2 rounded-2xl border p-2 text-left ${on ? 'border-[var(--signal)] bg-[var(--signal-wash)]' : 'border-[var(--line-strong)]'}`}>
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={imgSrc(`/product/${p.product_id}/image.svg`)} alt="" className="h-[64px] w-[52px] rounded-lg object-cover" />
+                <ProductImage src={`/product/${p.product_id}/image.svg`} alt={p.title} className="h-[64px] w-[52px] rounded-lg" />
                 <span>
                   <span className="block text-[11px] leading-tight text-[var(--ink-2)]">{p.title}</span>
                   <span className={`block text-[13.5px] font-bold ${on ? 'text-[var(--signal)]' : 'text-[var(--ink)]'}`}>₹{p.price}</span>

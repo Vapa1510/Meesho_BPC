@@ -3,7 +3,7 @@
 /** Small shared pieces: product image, fit ring, avatar, stars, toast. */
 import { useEffect, useState, type ReactNode } from 'react';
 
-import { imgSrc } from '@/lib/api';
+import { apiWake, imgSrc } from '@/lib/api';
 import { scoreTone } from '@/lib/types';
 
 export function ProductImage({
@@ -11,12 +11,27 @@ export function ProductImage({
   alt,
   className = '',
 }: {
-  src: string;
+  src?: string | null;
   alt: string;
   className?: string;
 }) {
   const [failed, setFailed] = useState(false);
-  if (failed) {
+  const [retryNonce, setRetryNonce] = useState(0);
+
+  useEffect(() => {
+    setFailed(false);
+  }, [src]);
+
+  useEffect(() => {
+    return apiWake.subscribe((waking) => {
+      if (!waking) {
+        setFailed(false);
+        setRetryNonce((n) => n + 1);
+      }
+    });
+  }, []);
+
+  if (!src || failed) {
     return (
       <div
         className={`flex items-center justify-center bg-[var(--signal-wash)] text-[12px] text-[var(--ink-3)] ${className}`}
@@ -25,10 +40,23 @@ export function ProductImage({
       </div>
     );
   }
+
+  const url = imgSrc(src);
+  if (!url) {
+    return (
+      <div
+        className={`flex items-center justify-center bg-[var(--signal-wash)] text-[12px] text-[var(--ink-3)] ${className}`}
+      >
+        no image
+      </div>
+    );
+  }
+
   return (
     // eslint-disable-next-line @next/next/no-img-element
     <img
-      src={imgSrc(src)}
+      key={`${url}-${retryNonce}`}
+      src={url}
       alt={alt}
       loading="lazy"
       onError={() => setFailed(true)}

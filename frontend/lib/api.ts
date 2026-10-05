@@ -30,8 +30,10 @@ import type {
 export const BASE = process.env.NEXT_PUBLIC_API_BASE ?? 'http://localhost:8000';
 
 /** Product images are served by the API unless a seller supplied a full URL. */
-export const imgSrc = (path: string): string =>
-  /^(https?:|data:)/.test(path) ? path : `${BASE}${path}`;
+export const imgSrc = (path?: string | null): string => {
+  if (!path) return '';
+  return /^(https?:|data:)/.test(path) ? path : `${BASE}${path}`;
+};
 
 export class ApiError extends Error {
   constructor(message: string, readonly status: number) {

@@ -7,7 +7,7 @@ import { useState } from 'react';
 
 import { ErrorState, Loading, PageHeader } from '@/components/AppShell';
 import { useBrands } from '@/components/BrandContext';
-import { Chip } from '@/components/ui';
+import { Chip, ProductImage } from '@/components/ui';
 import { api, BASE, imgSrc } from '@/lib/api';
 import { PACKS, type Niche } from '@/lib/types';
 
@@ -176,8 +176,7 @@ export default function NewProductPage() {
         <aside className="self-start">
           <p className="mb-2 text-[12px] font-medium text-[var(--ink-3)]">Preview</p>
           <div className="card">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={imgSrc(previewUrl)} alt="Product preview" className="aspect-square w-full object-cover" />
+            <ProductImage src={previewUrl} alt="Product preview" className="aspect-square w-full" />
             <div className="p-4">
               <p className="text-[11.5px] text-[var(--ink-3)]">{current.brand}</p>
               <p className="text-[15px] font-semibold">{f.title || 'Product name'}</p>

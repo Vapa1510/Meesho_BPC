@@ -148,6 +148,15 @@ def test_every_product_has_a_working_image(env):
     for pid in ids:
         r = client.get(f"/product/{pid}/image.svg")
         assert r.status_code == 200 and r.text.startswith("<svg")
+        assert r.headers["content-type"].startswith("image/svg+xml")
+    # Non-existent product returns 404
+    assert client.get("/product/NON_EXISTENT_ID/image.svg").status_code == 404
+    # Live preview endpoint returns valid SVG for both explicit and default query params
+    prev = client.get("/imagery/preview.svg?title=Serum&category=Skincare&pack=dropper&seed=Serum")
+    assert prev.status_code == 200 and prev.text.startswith("<svg")
+    assert prev.headers["content-type"].startswith("image/svg+xml")
+    prev_default = client.get("/imagery/preview.svg")
+    assert prev_default.status_code == 200 and prev_default.text.startswith("<svg")
     assert pick_shape("Vitamin C Serum") == "dropper"
     assert pick_shape("Acne Patch Pack") == "patch"
     assert pick_shape("Mystery Item", "tint") == "lipstick"
