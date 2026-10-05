@@ -104,7 +104,8 @@ def project(creator: Creator, product: Product, fit: int) -> tuple[int, int, int
 
 
 def match_creators(db: Session, product: Product) -> ProductMatches:
-    creators = list(db.scalars(select(Creator)).all())
+    # Synthetic creators from the Engine lab are never offered to brands.
+    creators = [c for c in db.scalars(select(Creator)).all() if not (c.handle or "").startswith("sim.")]
     products_by_id = {p.product_id: p for p in db.scalars(select(Product)).all()}
 
     events_by_creator: dict[str, list[FeedbackEvent]] = defaultdict(list)

@@ -115,13 +115,13 @@ export default function SimulatePage() {
     <>
       <PageHeader
         title="Simulation"
-        description="Generate a creator with hidden preferences that differ from what they declared, then run rounds and watch how much of the real preference the engine recovers."
+        description="Mechanism validation, not business validation. A synthetic creator carries hidden preferences that differ from what they declared; each round the engine serves a slate, the creator reacts, and we measure how much of the real preference the engine recovers. Synthetic results are not creator performance."
         actions={
           <>
             <button className="btn-quiet btn-sm" onClick={generate} disabled={busy !== null}>
               {busy === 'generate' ? 'Generating…' : 'Generate creator'}
             </button>
-            {hasRun && (
+            {hasRun && current.synthetic && (
               <button className="btn-quiet btn-sm" onClick={reset} disabled={busy !== null}>
                 Reset
               </button>
@@ -132,7 +132,7 @@ export default function SimulatePage() {
 
       {error && <ErrorState message={error} onRetry={loadState} />}
 
-      <div className="space-y-5 px-6 py-6">
+      <div className="space-y-5 px-4 py-6 sm:px-6">
         {/* ------------------------------------------------- run control */}
         <section className="panel">
           <div className="panel-head">
@@ -145,6 +145,15 @@ export default function SimulatePage() {
               </p>
             </div>
           </div>
+          {!current.synthetic && (
+            <div className="mx-4 mt-4 rounded-xl bg-[var(--signal-wash)] px-4 py-3 text-[12.5px] leading-relaxed text-[var(--plum)]">
+              {current.name} is one of the deck&apos;s creators. Simulations run on synthetic creators only, so the numbers
+              shown on the slides never move.{' '}
+              <button className="font-semibold text-[var(--signal)]" onClick={generate} disabled={busy !== null}>
+                Generate a synthetic creator →
+              </button>
+            </div>
+          )}
           <div className="flex flex-wrap items-end gap-4 px-4 py-4">
             <label className="w-[220px]">
               <span className="field-label">Rounds to run: {rounds}</span>
@@ -157,7 +166,7 @@ export default function SimulatePage() {
                 className="w-full accent-[var(--signal)]"
               />
             </label>
-            <button className="btn" onClick={run} disabled={busy !== null}>
+            <button className="btn" onClick={run} disabled={busy !== null || !current.synthetic}>
               {busy === 'run' ? 'Running…' : `Run ${rounds} rounds`}
             </button>
             {lastRun && (

@@ -18,8 +18,16 @@ from ..models import (
     Interaction,
     SimulatedProfile,
 )
-from .creators import GOAL_INTENT_SEED, to_out
+from .creators import to_out
+
 from ..schemas import CreatorOut
+
+# Starting intent scores for synthetic creators, by the goal they declare.
+GOAL_INTENT_SEED = {
+    "reach":   {"trend": 84, "commerce": 58, "brand": 52},
+    "revenue": {"trend": 70, "commerce": 86, "brand": 50},
+    "brand":   {"trend": 58, "commerce": 56, "brand": 82},
+}
 
 router = APIRouter(prefix="/simulation", tags=["simulation"])
 
@@ -33,6 +41,7 @@ class RunIn(BaseModel):
     creator_id: str
     rounds: int = Field(default=8, ge=1, le=40)
     top_k: int = Field(default=5, ge=1, le=20)
+    mode: str = Field(default="personalised", pattern="^(personalised|interleaved)$")
 
 
 class RoundOut(BaseModel):
@@ -66,6 +75,18 @@ def _creator_or_404(db: Session, creator_id: str) -> Creator:
     return creator
 
 
+def _synthetic_or_409(db: Session, creator_id: str) -> Creator:
+    """Simulations only touch synthetic creators, so the deck's creators keep their numbers."""
+    creator = _creator_or_404(db, creator_id)
+    if not (creator.handle or "").startswith("sim."):
+        raise HTTPException(
+            status_code=409,
+            detail="Simulations run on synthetic creators only, so the deck's creators keep the numbers "
+                   "shown on the slides. Generate a synthetic creator first.",
+        )
+    return creator
+
+
 @router.post("/generate", response_model=list[CreatorOut], status_code=201)
 def generate_creators(payload: GenerateIn, db: Session = Depends(get_db)):
     """Create one or more plausible creators, each with a hidden latent profile.
@@ -79,8 +100,12 @@ def generate_creators(payload: GenerateIn, db: Session = Depends(get_db)):
         spec = simulation.generate_creator_payload(seed)
         intent = GOAL_INTENT_SEED[spec["goal"]]
         followers = spec["followers"]
+        new_id = f"C{uuid.uuid4().hex[:6].upper()}"
         creator = Creator(
-            creator_id=f"C{uuid.uuid4().hex[:6].upper()}",
+            creator_id=new_id,
+            # Marks a synthetic creator: kept out of brand matching and the
+            # trust metrics, so the deck's numbers never move.
+            handle=f"sim.{new_id.lower()}",
             name=spec["name"],
             tier_label=(
                 "Established Creator" if followers >= 100_000
@@ -115,7 +140,7 @@ def generate_creators(payload: GenerateIn, db: Session = Depends(get_db)):
 @router.post("/run", response_model=RunOut)
 def run_simulation(payload: RunIn, db: Session = Depends(get_db)):
     """Run N rounds of serve → react → learn, measuring quality after each."""
-    creator = _creator_or_404(db, payload.creator_id)
+    creator = _synthetic_or_409(db, payload.creator_id)
     latent = simulation.ensure_latent(db, creator)
 
     profile = db.get(SimulatedProfile, creator.creator_id)
@@ -126,7 +151,7 @@ def run_simulation(payload: RunIn, db: Session = Depends(get_db)):
 
     for offset in range(payload.rounds):
         number = start + offset + 1
-        result = simulation.run_round(db, creator, latent, number, top_k=payload.top_k)
+        result = simulation.run_round(db, creator, latent, number, top_k=payload.top_k, mode=payload.mode)
         metrics = evaluation.evaluate_creator(db, creator, latent, k=payload.top_k)
         total_nmv += result.nmv
 
@@ -273,7 +298,7 @@ def discovered(creator_id: str, db: Session = Depends(get_db)):
 @router.post("/reset/{creator_id}", status_code=200)
 def reset(creator_id: str, db: Session = Depends(get_db)):
     """Wipe this creator's learned state so a demo can be run again cleanly."""
-    _creator_or_404(db, creator_id)
+    _synthetic_or_409(db, creator_id)
     db.execute(delete(FeedbackEvent).where(FeedbackEvent.creator_id == creator_id))
     db.execute(delete(Interaction).where(Interaction.creator_id == creator_id))
     db.execute(

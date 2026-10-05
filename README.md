@@ -1,216 +1,167 @@
 # Creator × Product Fit Engine
 
-> **v2.1, aligned with the DICE deck.** What changed from v2:
-> - **Indirect onboarding** (`engine/onboarding.py`, `/creator/onboard`). Creators connect a profile and
->   answer a few indirect questions: 5–8 for Emerging, 3–5 for Growth, 0–2 taps for Established. The
->   engine never asks for a "goal". Q1 feeds the **Content** signal, Q2 + Q3 (and an adaptive Q5) feed
->   **Intent** as a weighted score, Q4 feeds the **Product + Price** signals (preferred price = median
->   pick, observed range = min–max of picks). Intent separation below 0.25 (an MVP heuristic) triggers Q5.
-> - **Seven signals**: Brand fit (positioning overlap) joins audience, niche, intent, product, commerce
->   and trend.
-> - **3×3 marking scheme**: weights come from the creator's cell, scale × primary intent,
->   `W(cell) = W_intent + Δ_scale`, each cell summing to 100.
-> - **Penalties are visible**: crowding (4 / 8 / 12 points by scale) and return risk (0–10 points) are
->   subtracted, instead of being hidden inside the trend signal.
-> - **Price comfort is part of Product fit** (0.6 × quality + 0.4 × price comfort), not a multiplier.
-> - **Gates** match the deck: rating ≥ 3.8 (seller rating until a listing has 50 reviews), returns ≤
->   category median (once there is history), audience fit ≥ 0.5.
-> - Tier label "Top" is now "Established"; Top-K is 5 / 8 / 4 by scale; content angles are styled by
->   intent (Trend hook / Proof angle / Identity story) and use the formats from Q1.
+**Meesho DICE Challenge Season 3 · Business Track · Team Pro, IIT (BHU) Varanasi**
+Growing Beauty & Personal Care through influencers.
 
-One recommendation engine with two sides, built from slides 06 and 07 of the Meesho DICE
-Season 3 submission.
+From 1000s of BPC listings to a few worth promoting: the engine filters first, scores seven
+signals weighted by the creator's cell, explains every pick, rewards fit (not volume) and learns
+from every promote, save or skip (with reason).
 
-- **Creator side.** A ranked feed of products with pictures, fit scores and reasons. Promote, save or
-  skip with a reason, and the feed re-ranks. Accept or decline offers from brands.
-- **Brand side.** Pick a seller, open a product, and see which creators fit it, with a projection of
-  reach, orders and NMV. Send an offer, list a new product, and read why creators skipped.
-- **Engine lab.** The filter funnel, a creator simulation with hidden preferences, and ranking metrics.
+- **Live prototype:** https://meesho-cfe.vercel.app (API: https://meesho-bpc.onrender.com, docs at `/docs`)
+- **Sample data, not Meesho data.** 164 BPC listings, 13 creators. Every number on screen is computed live.
 
-```
-Next.js (Poppins, DICE theme)  ──REST/JSON──▶  FastAPI  ──▶  SQLite / PostgreSQL + pgvector
-  Creator   Discover · Catalogue · Offers · Profile     eligibility → retrieval → ranking
-  Brand     Dashboard · Product · List · Offers sent    product-to-creator matching
-  Lab       Pipeline · Simulation · Metrics             offers · imagery · closed loop
-```
+---
+
+## The QR codes in the deck
+
+The deck is final, so the prototype is built around the five QR codes exactly as printed.
+
+| Slide | Label | Opens | What a judge sees |
+| --- | --- | --- | --- |
+| 4 | Survey responses | Google Drive folder | Survey data (outside this repo) |
+| 7 | 1 · Indirect Onboarding Tool | `/creator/onboard` | Riya's onboarding, plus the 4-stop walkthrough |
+| 7 | 2 · Creator DNA Profile | `/creator` | Riya's Creator DNA (every value tagged fetched or asked) above her Top 8 |
+| 8 | 3 · Fit Engine (creator side) | `/creator/onboard` | The walkthrough's "Fit Engine: her Top 8" stop is one tap away |
+| 8 | 4 · Brand Match + Feedback Loop | `/creator` | The walkthrough's "Brand Match + feedback loop" stop is one tap away |
+
+Both landing pages carry a **four-stop walkthrough** that follows slides 7 and 8 in order:
+onboard Riya → her Creator DNA → her Top 8 → Brand Match and the feedback loop. A first-time
+visitor lands on **Riya Kapoor**, the deck's persona. **Reset demo** puts the shared deployment
+back to the exact numbers on the slides.
+
+**Keep the QR codes working:** deploy to the *same* Vercel project (the `frontend/.vercel` link
+is kept for that) and the *same* Render service, and keep `app/creator/page.tsx` and
+`app/creator/onboard/page.tsx` where they are. See [DEMO.md](DEMO.md).
 
 ---
 
 ## Run it
 
-Two terminals. No database to install.
-
 ```bash
 cd backend
 pip install -r requirements.txt
-uvicorn app.main:app --port 8000     # seeds itself on first start
+uvicorn app.main:app --port 8000      # creates and seeds creator_fit.db on first start
 ```
 
 ```bash
 cd frontend
 npm install
-npm run dev
+npm run dev                           # http://localhost:3000
 ```
-
-Open <http://localhost:3000>. API reference at <http://localhost:8000/docs>.
 
 ```bash
-cd backend && pytest -q        # 41 tests
+cd backend && pytest -q               # 69 tests, including the deck-number suite
 ```
 
-If you ran an earlier version, delete `backend/creator_fit.db` once so the new creators and
-sellers are seeded. (New columns are added to an old file automatically, but seed data is not.)
+`make reset` (or the **Reset demo** button, or `POST /demo/reset`) restores the deck state.
 
 ---
 
-## The five-minute demo
+## What the deck says, and where it lives in the code
 
-1. **Landing** → *Creator*. Aditi's **Discover** feed shows the top pick large, with the picture, the
-   fit score, two reasons and a content angle. Click any card to open the full breakdown: six
-   signals, each with its score, weight and what it added.
-2. **Skip** something with a reason (say *Too expensive*). The feed re-ranks, and the banner says
-   what it learned.
-3. Switch to **Brand** and pick *Dewdrop Labs*. Open **Vitamin C Serum**. The same six signals now
-   rank *creators*: Aditi and Simran score 91, Ananya 76. Nine creators in other categories are
-   listed as not offered this product, on purpose.
-4. **Send offer** to Aditi. Go back to *Creator → Offers*: it is in her inbox with its fit score.
-   Decline it with a reason.
-5. Back on the brand's product page, **What creators did with it** now shows the reason. That is
-   the feedback a brand never normally gets.
-6. **List a product** shows a live image preview. List it and the matching runs straight away.
-7. **Engine lab → Simulation** generates a creator whose true taste differs from what they declared,
-   runs rounds, and shows how much the engine recovers.
+| Deck | Claim | Code |
+| --- | --- | --- |
+| Slides 2, 6, 16 | Filter first: stock, rating ≥ 3.8 (seller rating under 50 reviews), returns ≤ category median, policy/claims, price window, exclusions, audience fit ≥ 50 | `engine/eligibility.py` |
+| Slides 4, 6, 16 | Seven signals: Audience, Niche, Intent, Product, Commerce, Trend, Brand | `engine/scoring.py` |
+| Slides 6, 16 | 3×3 marking scheme, `W(cell) = W_intent + Δscale`, every cell sums to 100; crowding λ = 4 / 8 / 12 | `engine/scoring.py` (`BASE_WEIGHTS`, `SCALE_DELTA`, `SATURATION_LAMBDA`) |
+| Slide 7 | Indirect onboarding: 5–8 / 3–5 / 0–2 questions by tier; Q2 + Q3 → intent (0.4 / 0.6); Q5 if separation < 0.25; consent before saving | `engine/onboarding.py`, `/creator/onboard` |
+| Slide 7 | Top-K by tier: Starter-5 (Emerging), Top 8 (Growth), Top 4 (Established) | `engine/pipeline.py` (`TOP_K_BY_SCALE`) |
+| Slides 7, 8 | Feedback re-ranks, bounded ×0.62 to ×1.15, 45-day half-life; never rewrites the DNA | `engine/learning.py` |
+| Slide 8 | Riya: 164 → 25 eligible; #1 Daily Sunscreen SPF 50 = 85; brand sees the same scores; skip of Ceramide 76 → 73 | `tests/test_deck_numbers.py` |
+| Slide 8 | Skip reasons and what each changes; decline = skip with a reason | `engine/learning.py`, `routers/feedback.py`, `routers/brands.py` |
+| Slides 2, 4, 5, 12 | Fit Rewards: fit-qualified picks only (fit ≥ 80); brand-funded samples only at fit ≥ 80; starter bonus on the first delivered fit-pick order; archetype rewards; paid on delivered orders net of returns | `engine/rewards.py`, `routers/orders.py`, offers in `routers/brands.py` |
+| Slide 5 | Click → Order → NMV → Fit Rewards → Learn | `POST /orders`, `GET /rewards/{id}` |
+| Slide 11 | Baseline = generic discovery; weeks 5–6 interleaved test with source hidden; pick-source logging | `engine/baseline.py`, `?mode=interleaved`, `GET /analytics/pilot`, Lab → Pilot test |
+| Slides 9, 12 | Trust metrics: explained picks, wrong picks, freshness, mix diversity, catalogue reach, fallback coverage, P95 latency, Precision@5 | `GET /analytics/trust`, Lab → Trust metrics |
+| Slide 18 | Riya × Vitamin C Serum: 68.3 / 98.0 / 87.9 / 93.6 / 91.8 / 74.2 / 85.0 → 85.0 − 1.76 = 83 | `tests/test_deck_numbers.py` |
+| Slide 17 | REST endpoints, creators / products / interactions tables | `routers/`, `models.py` |
 
----
-
-## Product images
-
-There is no photo library behind a demo catalogue, so `app/imagery.py` draws each product as a clean
-studio-style render of the right kind of pack (dropper bottle, tube, jar, lipstick, compact,
-palette, pencil, pump, oil bottle, spray, nail polish, patches) in a brand colour taken from the
-product id. These are illustrations, not photographs.
-
-A seller who has a real photo uploads it when listing (or sets `image_url` on the product); the API
-then serves that instead. The frontend asks for one URL per product and does not care which kind it
-gets.
+`tests/test_deck_numbers.py` asserts every number above on the full 164-listing catalogue, so a
+code change cannot silently move a number a judge can check.
 
 ---
 
-## The product side (`engine/matching.py`)
-
-The creator side asks *which products fit this creator*. The brand side asks the transpose, *which
-creators fit this product*, using the **same signals, the same price gate and the same learned
-adjustments**. A brand and a creator never see two different scores for the same pair (a test
-asserts it).
-
-Three things are specific to the brand's seat:
-
-- **Niche gate.** An unsolicited offer should not go to a creator who does not cover the product's
-  category. Off-niche creators are listed, but as not offered. (The creator side does not apply this
-  gate, so creators can still browse across categories on their own terms.)
-- **Why a pair is blocked.** Stage 1 runs per creator and the rule that blocked the pair is kept:
-  *price is outside this audience's band*, *creator has already promoted it*, and so on.
-- **A projection.** `reach = followers × engagement`, `clicks = reach × 0.10 × (fit / 80)`,
-  `orders = clicks × conversion`, `NMV = orders × price`. It is arithmetic on public inputs, not a
-  forecast, and the screen labels it that way.
-
-**Offers close the loop.** An offer lands in the creator's inbox. Accepting is recorded as a
-*promote*; declining needs a reason and is recorded as a *skip with that reason*. It goes through the
-same function as a tap on a card, so what the brand learns about its product and what the ranker
-learns about the creator come from one set of events.
-
-**New listings start cold.** No reviews, no orders, early trend. They are scored on the seller rating
-until real data arrives, and the product page says so.
-
----
-
-## The engine
-
-### Two-stage pipeline (`backend/app/engine/`)
-
-**Stage 1 — eligibility** (`eligibility.py`). Hard, cheap, auditable: category,
-price window, stock and serviceability, rating floor, policy compliance,
-creator exclusions, and anything the creator has already promoted. Every
-rejection is logged by rule. ~34% survives on the seed catalogue.
-
-**Stage 2 — retrieval** (`retrieval.py`). Orders the eligible pool by
-similarity. With `USE_PGVECTOR=1` this is a vector nearest-neighbour query;
-without it a deterministic hashed stand-in keeps the pipeline shape identical.
-Swap `pseudo_embedding()` for a sentence-transformer and nothing else changes.
-
-> At 164 products the candidate cap never binds, so Stage 2 orders rather than
-> narrows. The console says so rather than implying it filtered something.
-
-**Ranking** (`scoring.py`). Seven signals, each a pure 0–100 function of
-`(creator, product)`: audience, niche, intent, product, commerce, trend and brand fit.
-
-### Weights come from the creator's cell in a 3×3 matrix
+## How a score is built
 
 ```
-fit_score = ( Σ W_i(cell) × s_i  −  λ_S(scale) × saturation  −  return_penalty ) × learned_adjustment
-W(cell)   = W_intent + Δ_scale        (each cell sums to 100)
+FitScore(c, p) = ( Σ_i W_i(cell) · s_i(c, p)  −  λ_S(scale) · saturation(p)  −  ReturnPenalty(p) ) × L(c, p)
+
+W(cell)  = W_intent + Δ_scale            each cell sums to 100
+L(c, p)  = learned adjustment from her feedback, bounded 0.62 – 1.15, 45-day half-life
+Scored only if every hard check passes, including AudienceFit ≥ 50
 ```
 
-The primary intent sets the base weights (Commerce-led puts 25 on commerce fit, Trend-led 25 on trend
-fit, Brand-led 15 on brand fit) and the scale moves a few points: thin history leans on proven
-products, rich history leans on the creator's own signals. Scale never earns a higher score. Products
-far outside what the audience pays are removed in Stage 1; inside the window, price comfort is part of
-product fit. Every term appears in the console; a test asserts the contributions reconstruct the score.
+The appendix slide (A3) shows the equation without `L(c, p)`; slide 8 states its bounds.
 
-### The closed loop (`learning.py`)
+| Signal | Computed as (prototype) | At scale |
+| --- | --- | --- |
+| Audience | 0.68 × age overlap (0.75 recall + 0.25 precision) + 0.32 × city-tier overlap | + language and interests from attributed buyers and consented platform/API analytics |
+| Niche | 34 + 52 × (category share ÷ top share) + tag bonus (≤ 12) | same, from live content history |
+| Intent | her intent scores × the product's trend / commerce / brand roles | + observed promotion behaviour |
+| Product | 0.6 × quality (rating, reviews, seller rating, returns) + 0.4 × price comfort | same |
+| Commerce | 0.46 × conversion + 0.30 × orders (30 d) + 0.24 × NMV (30 d) | + CTR and similar-creator performance |
+| Trend | trend score × stage multiplier (seeded) | search and category momentum feeds |
+| Brand | Σ min(her positioning share, product share) | + brand/value alignment, past collaborations |
 
-| Reason | Effect |
-| --- | --- |
-| Too expensive | Down-weights products above the creator's price midpoint **only** |
-| Not my niche | Down-weights that category |
-| Already promoted | Removes that product from the slate |
-| Audience won't care | Down-weights the category and weak-audience matches |
-| Don't trust product | Down-weights lower-rated products |
-| Not trending | Down-weights flat-trend products |
-| Angle unclear | No ranking change — a content issue, not a fit issue |
-
-Adjustments decay (45-day half-life) and **saturate** rather than hitting a
-hard cap, so the response is graded: `84 → 76 → 70 → 66 → 60 → 56` over
-repeated skips. The first skip matters, the tenth barely moves it, and a run of
-angry taps can never zero a category.
-
-Two rules are eligibility decisions rather than scoring ones, because
-down-weighting leaves a product competing for a slot it can never deserve:
-
-- **Already promoted** removes the product.
-- **A promote retires the product by itself.** Waiting to be told "already
-  promoted" wastes a slot in every future slate, and asking a creator to reject
-  something they just posted about is the wrong way round.
+**Price.** The *band* is what her audience usually pays (Riya: ₹299–499). The *price window* is
+the hard gate: 45% below to 30% above the band (Riya: ₹164–649). Inside the window, price comfort
+lowers Product fit for anything outside the band, and the card says "above your band". This is
+how slide 8 gets 164 → 62 after the price window, and why Riya can skip the ₹599 Ceramide
+Moisturiser "above her range".
 
 ---
 
-## Simulation and evaluation
+## Architecture (honest version)
 
-This is what makes the metrics real rather than placeholders.
+```
+Next.js 14 (Vercel)  ──REST/JSON──▶  FastAPI (Render)  ──▶  SQLite (prototype) / PostgreSQL (production path)
+```
 
-A simulated creator carries a **latent preference profile** (`simulation.py`)
-that the engine never sees and that deliberately drifts from what they declared
-at signup — a secondary category they never mentioned, a real price ceiling
-below the stated one. Each round:
+| Piece | In the prototype | Proposed / production |
+| --- | --- | --- |
+| Web app | Next.js, responsive (works from a phone after a QR scan) | PWA |
+| API | FastAPI: creator, product, recommendation, feedback, analytics, brand, orders, demo | API gateway with auth and rate limits |
+| Database | **SQLite**, seeded on start; resets when the free host restarts | PostgreSQL (`docker-compose.yml`, `DATABASE_URL`) |
+| Retrieval | **Deterministic hashed similarity** + category + momentum (explainable, no model download) | learned encoder + pgvector ANN index |
+| Ranker | **Explainable weighted rules** (7 signals × 3×3 weights) + bounded feedback adjustments | learned ranker behind the same `_rank()` interface; training rows already logged |
+| Cache | none | Redis |
 
-1. the engine serves a Top-K slate,
-2. the creator reacts according to the latent profile,
-3. **the rejection reason is derived from whichever latent term was actually
-   violated**, so the learning loop is fed real signal rather than noise,
-4. the reaction is written back through the normal feedback path.
+`GET /health` says this in so many words. `USE_PGVECTOR=1` only reads stored vectors; it does not
+run a pgvector query.
 
-`evaluation.py` then scores the ranking against that latent utility — the only
-real ground truth available. The ablation reruns the same creator with the
-feedback loop disabled, which isolates what the loop itself is worth.
+---
 
-**Why round-over-round quality can fall while the loop is clearly helping:**
-round 1 is measured against the full catalogue, and by round 8 the creator has
-promoted the best matches, which retire. Falling precision is catalogue
-consumption, not a worse model. The ablation controls for it.
+## Evidence labels
 
-`latent_utility()` is the single definition of what a product is worth to a
-creator *now*, read by both the simulator and the evaluator — so the metric can
-never punish the engine for correctly declining to re-serve something.
+| Label | Meaning | Examples |
+| --- | --- | --- |
+| Sourced | external market data or Meesho disclosures | 4.12M creators (ISB × Hashfame), +141% content-commerce NMV (Q1 FY27) |
+| Derived | arithmetic on sourced inputs | 2.72M non-metro creators, ~85% with no campaign (1 − 408K / 2.72M) |
+| Sample data | the prototype's catalogue and creators | every product, rating, order count in the app |
+| Projection | arithmetic on sample inputs, not a forecast | brand-side reach, orders, NMV |
+| Simulated | synthetic creators with hidden preferences: mechanism checks | Precision@5, the synthetic interleaving win rate |
+| Team hypothesis | modelled target, validated in the pilot | +11.5% NMV per creator, −13% returns, ~41% faster first order, −30% search effort |
+
+**NMV** is net of cancellations, returns and undelivered orders; it is not revenue or profit.
+
+**Funnel ≠ NMV case.** The funnel uplift (+25% clicks, +39% add-to-cart, +33% orders per 1,000
+product views) describes product-page conversion. The +11.5% NMV case does not use it: it holds
+orders per promotion at 8 and AOV at ₹400 and counts only +0.30 promotions per creator a month.
+
+---
+
+## Pilot (slide 11)
+
+- **Weeks 3–4, baseline:** today's generic discovery (`mode=generic`: high-converting SKUs for everyone).
+- **Weeks 5–6, interleaved test:** personalised and generic picks in one feed, team-draft order,
+  source hidden from the creator, logged per pick (`recommendation_log.source`, `feedback_events.source`).
+  Gate 1 reads the match-quality win rate (`GET /analytics/pilot`). Interleaving compares both
+  feeds inside each creator's session, which is why 150–200 creators can read match quality when
+  a conventional A/B test on NMV could not detect +11.5%.
+- **Weeks 7–12:** A/B with holdout; NMV is directional, with confidence intervals.
+
+The Lab's **Pilot test** page serves an interleaved slate, reveals the source on demand, and can run
+a synthetic check (labelled as such).
 
 ---
 
@@ -218,75 +169,43 @@ never punish the engine for correctly declining to re-serve something.
 
 | Method | Path | Purpose |
 | --- | --- | --- |
-| `GET` | `/creator/{id}` | Profile and intent scores |
-| `POST` | `/creator/onboard` | Create from the onboarding answers |
-| `GET` | `/recommendations/{id}?category=bpc&top_k=5` | Top-K, scores, reasons, funnel stats |
-| `POST` | `/rank-products` | Score an explicit candidate set |
-| `GET` | `/product/{id}` | Product details and signals |
-| `POST` | `/feedback` | Promote / save / skip with a reason |
-| `GET` | `/analytics/metrics` | CTR, acceptance, NMV, ranking quality |
-| `POST` | `/simulation/generate` | Create creators with hidden latent profiles |
-| `POST` | `/simulation/run` | Run N rounds, measuring after each |
-| `GET` | `/simulation/history/{id}` | The learning curve |
-| `GET` | `/simulation/ablation/{id}` | Loop on versus loop off |
-| `GET` | `/simulation/discovered/{id}` | Stated vs learned vs true |
-| `POST` | `/simulation/reset/{id}` | Clear learned state for a clean demo |
-| `GET` | `/brands` | Sellers, with portfolio and offer stats |
-| `GET` | `/brands/{brand}` | One seller's products and offer funnel |
-| `POST` | `/products` | List a new product (cold start) |
-| `GET` | `/product/{id}/matches` | Creators ranked for a product, diagnosis, creator feedback |
-| `GET` | `/product/{id}/image.svg` | The product picture (drawn, unless a photo was set) |
-| `POST` | `/pitches` | A brand sends an offer to a creator |
-| `GET` | `/pitches?creator_id=&brand=` | Offers, for either side |
-| `POST` | `/pitches/{id}/respond` | Accept, or decline with a reason |
-
-`model_performance` reports `no_simulation_run_yet` until there is ground truth
-to measure against, rather than inventing a number.
-
-### Reproducing the deck's table
-
-The seed data carries the deck's figures, so scoring those five products
-returns the deck's scores:
-
-```bash
-curl -X POST localhost:8000/rank-products -H 'Content-Type: application/json' \
-  -d '{"creator_id":"C12345","product_ids":["P001","P002","P003","P004","P005"]}'
-```
-
-```
-P001 Vitamin C Serum    ₹499  91    Beginner skincare routine under ₹500
-P002 Acne Patch Pack    ₹399  85
-P003 Viral Lip Tint     ₹299  84
-P004 Budget Kajal       ₹149  71
-P005 Premium Hair Serum ₹899  66
-```
-
-Those five scores are for Aditi (C12345); they all appear in **Creator → Catalogue**.
-
-`GET /recommendations` ranks the whole catalogue, so its Top 5 is *not* these
-five — it finds better matches for Aditi. That is the engine working; the
-deck's table is a fixed illustration of five named products.
+| `GET` | `/creator/{id}` · `/creators` | Profile, Creator DNA and sources (Riya first) |
+| `POST` | `/creator/onboard` | Build the DNA from a connected profile + answers (consent required; same handle updates, never duplicates) |
+| `PATCH` | `/creator/{id}` | The creator correcting intent, price or exclusions; only sent fields change |
+| `GET` | `/recommendations/{id}?category=bpc[&mode=interleaved\|generic][&top_k=]` | Top-K (by tier by default) with drivers, checks, rewards, source |
+| `POST` | `/rank-products` | Score any products; each says whether it would be served, and why not |
+| `GET` | `/product/{id}` | Product details |
+| `POST` | `/feedback` | Promote / save / skip (a skip needs a reason) |
+| `GET` | `/product/{id}/matches` | Creators ranked for a product (brand view), projections, skip reasons |
+| `POST` | `/pitches` · `/pitches/{id}/respond` | Offers, optional Fit Reward (fit ≥ 80), decline with a reason |
+| `POST` | `/orders` | Attributed order event: delivered / returned / cancelled |
+| `GET` | `/rewards/{id}` | Fit Rewards: archetype, earned, delivered fit-pick NMV |
+| `GET` | `/analytics/trust` · `/analytics/pilot` · `/analytics/metrics` | Trust metrics vs targets, interleaving win rate, counters |
+| `POST` | `/simulation/generate` · `/simulation/run` | Synthetic creators only (never the deck's creators) |
+| `GET` · `POST` | `/demo` · `/demo/reset` | The walkthrough and the reset |
 
 ---
 
-## Swapping in a learned model
+## Notes for reviewers: where a slide and the prototype differ
 
-The MVP ranker sits behind one function. Replace the body of `_rank()` in
-`engine/pipeline.py`; its inputs and output shape are the contract the routers
-and the console depend on. The training rows are already accumulating:
-`recommendation_log` holds every served slate with its signals,
-`feedback_events` holds what the creator did about it.
+The deck could not be edited after submission. These are the places where a slide reads
+differently from the running prototype, and why.
 
-## PostgreSQL + pgvector
-
-```bash
-docker compose up -d
-export DATABASE_URL=postgresql+psycopg://cfe:cfe@localhost:5432/creator_fit_db
-export USE_PGVECTOR=1
-cd backend && python -m app.seed && uvicorn app.main:app --port 8000
-```
-
-Only `config.py` reads the environment; no application code changes.
+- **Slide 17 (A4) phone screens** label the profile "Riya", but the values shown (18–24, Tier 1/2,
+  ₹200–700, intent 78/86/54, Top 5 of 90/85/84/83/82) are seed creator **Aditi Sharma (C12345)**,
+  who is in the app with exactly those numbers. Riya's own DNA is the one on slides 7, 8 and 18.
+- **Slides 5 and 6** show illustrative product lists (marked illustrative on the slides). The live
+  Top 8 for Riya is Sunscreen 85, Vitamin C 83, Rosemary Hair Oil 83, Niacinamide 78, ….
+- **Top-K:** slides 2, 4, 5, 11 and 17 say "Top 5"; the prototype follows slide 7's tier rule
+  (Starter-5 / Top 8 / Top 4), as the pilot plan intends at scale.
+- **Slide 8** says "12 creators": the sample data has 12 seeded creators plus Riya.
+- **Slide 17** marks PostgreSQL + pgvector as in the prototype: the prototype runs SQLite with
+  deterministic retrieval (see Architecture).
+- **"Not relevant"** (slides 9, 12): the prototype uses "Skip (with reason)" throughout; wrong
+  picks are skips for a fit reason (too expensive, not my niche, audience won't care, don't trust
+  product, not trending).
+- **Question depth:** within the slide's ranges; an Emerging creator gets 5–7 questions and a
+  Growth creator 4–5.
 
 ---
 
@@ -294,45 +213,11 @@ Only `config.py` reads the environment; no application code changes.
 
 ```
 backend/app/
-  config.py  database.py  models.py  schemas.py  seed.py
-  engine/
-    eligibility.py   stage 1 — hard filters
-    retrieval.py     stage 2 — candidate retrieval
-    scoring.py       seven signals, 3×3 weights, penalties
-    onboarding.py    indirect questions → Creator DNA
-    reasons.py       reason codes, caveats, confidence, content angle
-    learning.py      the closed loop
-    simulation.py    latent creators and synthetic outcomes
-    evaluation.py    NDCG, precision, ablation
-    matching.py      product side: creators ranked for one product
-    pipeline.py      orchestration — the only module the routers call
-  imagery.py         product pictures
-  routers/           creators, products, recommendations, feedback,
-                     analytics, simulation, brands
-  tests/             41 behavioural tests
-frontend/
-  app/               /  creator/*  brand/*  lab/*
-  components/        shell, creator and brand context, cards, drawer, chart primitives
-  lib/api.ts         typed client
+  engine/  eligibility · retrieval · scoring · onboarding · reasons · learning · rewards
+           baseline (generic feed, fallback, interleaving) · pipeline · matching · simulation · evaluation
+  routers/ creators · products · recommendations · feedback · brands · orders · analytics · simulation · demo
+  seed.py  12 creators + Riya (built from her deck answers) + 164 listings
+backend/tests/   69 tests; test_deck_numbers.py pins the slides
+frontend/app/    /  creator/{,onboard,profile,catalogue,offers}  brand/*  lab/{pipeline,metrics,pilot,simulate}
+frontend/components/DemoGuide.tsx   the walkthrough on the QR landing pages
 ```
-
-## Notes on the demo data
-
-- Creator `C12345` and products `P001`–`P005` carry the deck's exact figures.
-- `P006`–`P024` are hand-written alternatives.
-- ~140 further products are **generated deterministically** (seed `20260102`)
-  to supply the noise a real catalogue has — wrong price bracket, thin reviews,
-  out of stock. Without them Stage 1 would look like it does nothing. They are
-  capped below the hand-written products on rating, trend and saturation. Set
-  `FILLER_PRODUCTS=0` to turn them off.
-- Interactions use orders × price (₹1,497 for 3 × ₹499). The NMV column in the
-  slide 06 table is 10× this.
-
-## A note on colour
-
-The look follows the DICE deck: white space, one hot pink, deep plum for type, and the pastel
-gradient used sparingly. Pink marks the thing to act on or a live value. Fit scores use one hue
-stepped light-to-dark rather than a multi-colour band scheme, because a categorical set there
-failed colour-vision separation and encoded nothing the number beside it did not already say.
-The two chart series were validated for colour-vision separation (worst adjacent ΔE 18.0 under
-protanopia). Type is Poppins; the app loads it from Google Fonts.

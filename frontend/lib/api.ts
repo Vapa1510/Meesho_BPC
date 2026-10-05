@@ -11,6 +11,10 @@ import type {
   Discovered,
   DNA,
   FetchedProfile,
+  Pilot,
+  Rewards,
+  Trust,
+  OrderRow,
   OnboardingAnswers,
   FeedbackResponse,
   Goal,
@@ -35,21 +39,64 @@ export class ApiError extends Error {
   }
 }
 
+/* ------------------------------------------------------------------ wake-up
+ * The demo backend runs on a free host that sleeps when idle. The first
+ * request after a nap can take up to a minute, or fail while it boots. Requests
+ * retry quietly, and the shell shows a "waking up" note meanwhile. */
+type WakeListener = (waking: boolean) => void;
+const wakeListeners = new Set<WakeListener>();
+let waking = false;
+function setWaking(next: boolean) {
+  if (waking === next) return;
+  waking = next;
+  wakeListeners.forEach((fn) => fn(next));
+}
+export const apiWake = {
+  subscribe(fn: WakeListener) {
+    wakeListeners.add(fn);
+    return () => {
+      wakeListeners.delete(fn);
+    };
+  },
+  isWaking: () => waking,
+};
+
+const RETRY_DELAYS_MS = [1500, 3000, 5000, 8000, 10000, 12000, 15000, 15000];
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  let response: Response;
+  let response: Response | null = null;
+  // Only reads are retried: repeating a POST could record a tap twice.
+  const retries = !init?.method || init.method === 'GET' ? RETRY_DELAYS_MS.length : 0;
+  const slow = setTimeout(() => setWaking(true), 4000);
   try {
-    response = await fetch(`${BASE}${path}`, {
-      ...init,
-      headers: { 'Content-Type': 'application/json', ...(init?.headers ?? {}) },
-      cache: 'no-store',
-    });
-  } catch {
+    for (let attempt = 0; ; attempt++) {
+      try {
+        response = await fetch(`${BASE}${path}`, {
+          ...init,
+          headers: { 'Content-Type': 'application/json', ...(init?.headers ?? {}) },
+          cache: 'no-store',
+        });
+        if (![502, 503, 504].includes(response.status)) break;
+      } catch {
+        response = null;
+      }
+      if (attempt >= retries) break;
+      setWaking(true);
+      await sleep(RETRY_DELAYS_MS[attempt]);
+    }
+  } finally {
+    clearTimeout(slow);
+  }
+  if (!response) {
+    setWaking(false);
     throw new ApiError(
-      `No response from the API at ${BASE}. Start the backend with ` +
-        '"uvicorn app.main:app --port 8000".',
+      `No response from the API at ${BASE}. If this is the hosted demo, the server may still be ` +
+        'waking up: wait a few seconds and try again.',
       0,
     );
   }
+  setWaking(false);
   if (!response.ok) {
     const body = await response.json().catch(() => ({}));
     const detail =
@@ -82,8 +129,13 @@ export const api = {
       body: JSON.stringify({ ...payload, consent: true }),
     }),
 
-  recommendations: (id: string, topK = 5) =>
-    request<RecommendationsResponse>(`/recommendations/${id}?category=bpc&top_k=${topK}`),
+  /** Top-K follows the creator's tier (5 / 8 / 4) unless topK is given. */
+  recommendations: (id: string, opts: { topK?: number; mode?: 'personalised' | 'interleaved' | 'generic' } = {}) => {
+    const q = new URLSearchParams({ category: 'bpc' });
+    if (opts.topK) q.set('top_k', String(opts.topK));
+    if (opts.mode && opts.mode !== 'personalised') q.set('mode', opts.mode);
+    return request<RecommendationsResponse>(`/recommendations/${id}?${q.toString()}`);
+  },
 
   rankProducts: (creatorId: string, productIds: string[]) =>
     request<Recommendation[]>('/rank-products', {
@@ -100,6 +152,7 @@ export const api = {
     action: Action;
     reason?: string | null;
     served_score?: number | null;
+    source?: string | null;
   }) => request<FeedbackResponse>('/feedback', { method: 'POST', body: JSON.stringify(payload) }),
 
   updateCreator: (
@@ -108,6 +161,16 @@ export const api = {
   ) => request<Creator>(`/creator/${id}`, { method: 'PATCH', body: JSON.stringify(payload) }),
 
   metrics: () => request<Metrics>('/analytics/metrics'),
+  trust: () => request<Trust>('/analytics/trust'),
+  pilot: () => request<Pilot>('/analytics/pilot'),
+
+  /* ------------------------------------------------- orders + Fit Rewards */
+  rewards: (creatorId: string) => request<Rewards>(`/rewards/${creatorId}`),
+  order: (payload: { creator_id: string; product_id: string; status: 'placed' | 'delivered' | 'returned' | 'cancelled' }) =>
+    request<OrderRow>('/orders', { method: 'POST', body: JSON.stringify(payload) }),
+
+  /* ----------------------------------------------------------------- demo */
+  resetDemo: () => request<{ status: string; demo_creator_id: string }>('/demo/reset', { method: 'POST' }),
 
   /* ---------------------------------------------------------- brand side */
   brands: () => request<BrandSummary[]>('/brands'),
@@ -115,7 +178,7 @@ export const api = {
   createProduct: (payload: NewProduct) =>
     request<Product>('/products', { method: 'POST', body: JSON.stringify(payload) }),
   productMatches: (id: string) => request<ProductMatches>(`/product/${id}/matches`),
-  sendPitch: (payload: { product_id: string; creator_id: string; message?: string }) =>
+  sendPitch: (payload: { product_id: string; creator_id: string; message?: string; incentive?: string | null }) =>
     request<Pitch>('/pitches', { method: 'POST', body: JSON.stringify(payload) }),
   pitches: (params: { creator_id?: string; brand?: string; product_id?: string }) => {
     const q = new URLSearchParams(
@@ -136,10 +199,10 @@ export const api = {
       body: JSON.stringify({ count, seed: seed ?? null }),
     }),
 
-  runSimulation: (creatorId: string, rounds = 8, topK = 5) =>
+  runSimulation: (creatorId: string, rounds = 8, topK = 5, mode: 'personalised' | 'interleaved' = 'personalised') =>
     request<SimRun>('/simulation/run', {
       method: 'POST',
-      body: JSON.stringify({ creator_id: creatorId, rounds, top_k: topK }),
+      body: JSON.stringify({ creator_id: creatorId, rounds, top_k: topK, mode }),
     }),
 
   simHistory: (creatorId: string) => request<SimHistory>(`/simulation/history/${creatorId}`),
@@ -152,18 +215,35 @@ export const api = {
 const KEY = 'cfe.creator_id';
 const BRAND_KEY = 'cfe.brand';
 
-export const brandSession = {
-  get: (): string | null =>
-    typeof window === 'undefined' ? null : window.localStorage.getItem(BRAND_KEY),
-  set: (name: string) => window.localStorage.setItem(BRAND_KEY, name),
-};
+/** Browser storage can be missing or blocked (private windows, previews). */
+function store(key: string): { get: () => string | null; set: (v: string) => void; clear: () => void } {
+  return {
+    get: () => {
+      try {
+        return typeof window === 'undefined' ? null : window.localStorage.getItem(key);
+      } catch {
+        return null;
+      }
+    },
+    set: (v: string) => {
+      try {
+        window.localStorage.setItem(key, v);
+      } catch {
+        /* the selection simply is not remembered */
+      }
+    },
+    clear: () => {
+      try {
+        window.localStorage.removeItem(key);
+      } catch {
+        /* nothing to clear */
+      }
+    },
+  };
+}
 
-export const session = {
-  get: (): string | null =>
-    typeof window === 'undefined' ? null : window.localStorage.getItem(KEY),
-  set: (id: string) => window.localStorage.setItem(KEY, id),
-  clear: () => window.localStorage.removeItem(KEY),
-};
+export const brandSession = store(BRAND_KEY);
+export const session = store(KEY);
 
 export const fmt = {
   int: (n: number) => n.toLocaleString('en-IN'),

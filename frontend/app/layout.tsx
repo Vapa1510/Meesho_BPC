@@ -6,9 +6,9 @@ import { CreatorProvider } from '@/components/CreatorContext';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'Fit Engine — creators and products, matched',
+  title: 'Fit Engine · Meesho DICE S3 · Team Pro',
   description:
-    'Ranks BPC products for creators on audience, niche, intent, quality, commerce and trend — and shows the working behind every score.',
+    'Creator × Product Fit Engine: ranks BPC products for each creator on seven signals (audience, niche, intent, product, commerce, trend, brand) and explains every score. Prototype with sample data.',
 };
 
 export const viewport: Viewport = {

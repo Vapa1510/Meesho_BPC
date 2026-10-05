@@ -14,24 +14,28 @@ import { useBrands } from '@/components/BrandContext';
 import { SignalBars } from '@/components/ProductDrawer';
 import { Avatar, FitRing, ProductImage, Star, StatusChip, Toast } from '@/components/ui';
 import { api, fmt } from '@/lib/api';
-import { INTENT_LABEL } from '@/lib/types';
+import { FIT_QUALIFIED, INCENTIVES, INTENT_LABEL, NMV_NOTE } from '@/lib/types';
 import { REASON_LABEL, type CreatorMatch, type ProductMatches } from '@/lib/types';
 
 function MatchRow({
   m,
   productTitle,
   brand,
+  trendStage,
   onSend,
   sending,
 }: {
   m: CreatorMatch;
   productTitle: string;
   brand: string;
-  onSend: (message: string) => void;
+  trendStage: string;
+  onSend: (message: string, incentive: string | null) => void;
   sending: boolean;
 }) {
   const [compose, setCompose] = useState(false);
   const [why, setWhy] = useState(false);
+  const [incentive, setIncentive] = useState<string | null>(null);
+  const qualified = m.fit_score >= FIT_QUALIFIED;
   const [message, setMessage] = useState(
     `Hi ${m.name.split(' ')[0]}, ${brand} would love for you to feature ${productTitle}. We think it suits your audience.`,
   );
@@ -43,12 +47,12 @@ function MatchRow({
         <div className="min-w-[170px] flex-1">
           <p className="text-[14px] font-semibold">{m.name}</p>
           <p className="text-[12px] text-[var(--ink-3)]">
-            {m.niche} · {fmt.compact(m.followers)} followers · {INTENT_LABEL[m.goal] ?? m.goal}
+            {m.niche} · {fmt.compact(m.followers)} followers · {INTENT_LABEL[m.goal] ?? m.goal} · ₹{m.price_min}–{m.price_max}
           </p>
           {m.reasons[0] && <p className="mt-1 text-[12.5px] text-[var(--ink-2)]">✓ {m.reasons[0]}</p>}
         </div>
 
-        <dl className="grid grid-cols-3 gap-5 text-center">
+        <dl className="grid grid-cols-3 gap-5 text-center" title="Projection: followers × engagement × click share × this product's conversion. Not a forecast.">
           {[
             ['Reach', fmt.compact(m.est_reach)],
             ['Orders', fmt.int(m.est_orders)],
@@ -88,11 +92,38 @@ function MatchRow({
             rows={2}
             className="field !rounded-lg"
           />
+          <div className="mt-2">
+            <p className="mb-1 text-[11.5px] font-semibold text-[var(--ink-3)]">
+              Attach a Fit Reward {qualified ? '(this pair qualifies: fit 80+)' : `(needs fit 80+; this pair is ${m.fit_score})`}
+            </p>
+            <div className="flex flex-wrap gap-1.5">
+              <button
+                onClick={() => setIncentive(null)}
+                className={`chip text-[11.5px] ${incentive === null ? 'border-[var(--signal)] text-[var(--signal)]' : ''}`}
+              >
+                None
+              </button>
+              {INCENTIVES.map((i) => {
+                const disabled = !qualified || (i.value === 'early_access' && !['early', 'rising'].includes(trendStage));
+                return (
+                  <button
+                    key={i.value}
+                    disabled={disabled}
+                    title={i.note}
+                    onClick={() => setIncentive(i.value)}
+                    className={`chip text-[11.5px] disabled:opacity-40 ${incentive === i.value ? 'border-[var(--signal)] text-[var(--signal)]' : ''}`}
+                  >
+                    {i.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
           <div className="mt-2 flex justify-end gap-2">
             <button className="btn-quiet btn-sm" onClick={() => setCompose(false)}>
               Cancel
             </button>
-            <button className="btn btn-sm" disabled={sending} onClick={() => onSend(message)}>
+            <button className="btn btn-sm" disabled={sending} onClick={() => onSend(message, incentive)}>
               Send to {m.name.split(' ')[0]}
             </button>
           </div>
@@ -142,10 +173,10 @@ export default function BrandProductPage() {
     void load();
   }, [load]);
 
-  async function send(creatorId: string, name: string, message: string) {
+  async function send(creatorId: string, name: string, message: string, incentive: string | null) {
     setSending(true);
     try {
-      await api.sendPitch({ product_id: id, creator_id: creatorId, message });
+      await api.sendPitch({ product_id: id, creator_id: creatorId, message, incentive });
       setToast(`Offer sent to ${name}. It is in their Offers inbox.`);
       invalidate();
       await load();
@@ -167,10 +198,15 @@ export default function BrandProductPage() {
   const maxSkip = Math.max(1, ...Object.values(f.skip_reasons));
 
   return (
-    <div className="px-6 pb-16 pt-6">
-      <Link href="/brand" className="text-[12.5px] text-[var(--ink-3)] hover:text-[var(--signal)]">
-        ← All products
-      </Link>
+    <div className="px-4 pb-16 pt-6 sm:px-6">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <Link href="/brand" className="text-[12.5px] text-[var(--ink-3)] hover:text-[var(--signal)]">
+          ← All products
+        </Link>
+        <span className="text-[11.5px] text-[var(--ink-3)]">
+          Brand view (Phase 2 extension): the same engine, seen from the product&apos;s side. Sample data.
+        </span>
+      </div>
 
       <section className="card mt-3 flex flex-col md:flex-row">
         <ProductImage src={p.image} alt={p.title} className="aspect-[4/3] w-full md:aspect-auto md:h-[300px] md:w-[300px]" />
@@ -213,8 +249,9 @@ export default function BrandProductPage() {
             <div>
               <h2 className="panel-title">Best-fit creators</h2>
               <p className="panel-note">
-                Same seven signals the creator sees. Reach, orders and NMV are projections: followers × engagement
-                × click share × this product&rsquo;s conversion rate.
+                Same seven signals and the same score the creator sees. Reach, orders and NMV are{' '}
+                <b>projections</b>, not forecasts: followers × engagement × click share × this product&rsquo;s conversion
+                rate. {NMV_NOTE}
               </p>
             </div>
           </div>
@@ -230,8 +267,9 @@ export default function BrandProductPage() {
                   m={m}
                   productTitle={p.title}
                   brand={p.brand}
+                  trendStage={p.trend_stage}
                   sending={sending}
-                  onSend={(msg) => void send(m.creator_id, m.name, msg)}
+                  onSend={(msg, inc) => void send(m.creator_id, m.name, msg, inc)}
                 />
               ))}
             </ul>

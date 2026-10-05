@@ -10,9 +10,9 @@ import os
 # switch to Postgres; nothing else in the code changes.
 DATABASE_URL: str = os.getenv("DATABASE_URL", "sqlite:///./creator_fit.db")
 
-# pgvector is only used when it is actually available. When off, semantic
-# similarity falls back to a deterministic lexical overlap score, so Stage 2 of
-# the pipeline behaves the same way (just less precisely).
+# The MVP's Stage 2 uses deterministic hashed similarity either way. With
+# USE_PGVECTOR=1 it reads the product vectors stored at seed time instead of
+# recomputing them; a real pgvector ANN query is the production path.
 USE_PGVECTOR: bool = os.getenv("USE_PGVECTOR", "0") == "1"
 EMBEDDING_DIM: int = int(os.getenv("EMBEDDING_DIM", "128"))
 

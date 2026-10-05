@@ -31,7 +31,7 @@ export default function PipelinePage() {
     setError(null);
     setData(null);
     try {
-      setData(await api.recommendations(current.creator_id, 5));
+      setData(await api.recommendations(current.creator_id));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not load the pipeline.');
     }
@@ -47,7 +47,7 @@ export default function PipelinePage() {
     <>
       <PageHeader
         title="Pipeline"
-        description={`Every product in the catalogue, filtered down to the slate ${current.name} actually sees. Stage 1 is hard rules; Stage 2 narrows by similarity; the ranker scores what survives.`}
+        description={`Every listing in the catalogue, filtered down to the slate ${current.name} actually sees. Stage 1 is hard, auditable rules; Stage 2 orders candidates by deterministic similarity; the ranker scores what survives with explainable weighted rules. MVP = explainable rules + deterministic retrieval; production = a learned retriever and ranker behind the same interface.`}
       />
 
       {error && <ErrorState message={error} onRetry={load} />}
@@ -149,7 +149,7 @@ export default function PipelinePage() {
                 },
                 {
                   name: 'Stage 2 — retrieval',
-                  body: 'Narrows the eligible pool to a candidate set by blending semantic similarity with category match and momentum. With pgvector enabled this is a nearest-neighbour query; without it, a deterministic stand-in keeps the pipeline shape identical.',
+                  body: 'Orders the eligible pool into a candidate set (capped at 200) by blending a deterministic hashed text similarity with category match and momentum. This is the MVP: explainable and model-free. Production swaps in a learned encoder with a pgvector nearest-neighbour index; the interface stays the same.',
                 },
                 {
                   name: 'Ranking',

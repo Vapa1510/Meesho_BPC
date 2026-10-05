@@ -19,6 +19,17 @@ const SORTS = [
 ];
 const PAGE = 24;
 
+const BLOCKED: Record<string, string> = {
+  price_range: 'Not in feed: outside her price window',
+  stock_serviceable: 'Not in feed: out of stock',
+  quality_threshold: 'Not in feed: below the rating bar',
+  return_rate: 'Not in feed: returns above median',
+  policy_compliant: 'Not in feed: policy or claims flag',
+  creator_excluded: 'Not in feed: category she excluded',
+  audience_fit: 'Not in feed: audience mismatch',
+  already_promoted: 'Already promoted',
+};
+
 export default function CataloguePage() {
   const { current, loading, revision, invalidate } = useCreators();
   const [catalogue, setCatalogue] = useState<Product[]>([]);
@@ -57,8 +68,6 @@ export default function CataloguePage() {
 
   useEffect(() => setShown(PAGE), [category, sort, query]);
 
-  const byId = useMemo(() => new Map(catalogue.map((p) => [p.product_id, p])), [catalogue]);
-
   const rows = useMemo(() => {
     const list = (scored ?? []).filter(
       (r) =>
@@ -68,7 +77,8 @@ export default function CataloguePage() {
     );
     if (sort === 'price_asc') list.sort((a, b) => a.price - b.price);
     else if (sort === 'trend') list.sort((a, b) => b.trend_score - a.trend_score);
-    else list.sort((a, b) => b.fit_score - a.fit_score);
+    // Best fit: what the feed could serve first, then the rest with the rule that blocks it.
+    else list.sort((a, b) => Number(b.eligible) - Number(a.eligible) || b.fit_score - a.fit_score);
     return list;
   }, [scored, category, sort, query]);
 
@@ -99,10 +109,10 @@ export default function CataloguePage() {
     <>
       <PageHeader
         title="Catalogue"
-        description={`Every product, scored for ${current.name.split(' ')[0]}. Low scores come with the reason, so you can see why something was not recommended.`}
+        description={`Every listing, scored for ${current.name.split(' ')[0]}. Products that fail a hard check (price window, stock, rating, returns, claims, audience) are marked and never reach her feed.`}
       />
 
-      <div className="flex flex-wrap items-center gap-2 px-6 pb-5 pt-4">
+      <div className="flex flex-wrap items-center gap-2 px-4 pb-5 pt-4 sm:px-6">
         {CATEGORIES.map((c) => (
           <Chip key={c} active={category === c} onClick={() => setCategory(c)}>
             {c}
@@ -112,7 +122,7 @@ export default function CataloguePage() {
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Search products or brands"
-          className="field ml-auto !w-[240px] !rounded-full"
+          className="field !w-full !rounded-full sm:ml-auto sm:!w-[240px]"
         />
         <select
           value={sort}
@@ -133,13 +143,12 @@ export default function CataloguePage() {
 
       {scored && (
         <>
-          <p className="px-6 pb-3 text-[12px] text-[var(--ink-3)]">
-            {fmt.int(rows.length)} products
+          <p className="px-4 pb-3 text-[12px] text-[var(--ink-3)] sm:px-6">
+            {fmt.int(rows.length)} products · {fmt.int(rows.filter((r) => r.eligible).length)} pass every check
           </p>
-          <div className="grid grid-cols-2 gap-4 px-6 pb-6 md:grid-cols-3 xl:grid-cols-4">
+          <div className="grid grid-cols-2 gap-3 px-4 pb-6 sm:gap-4 sm:px-6 md:grid-cols-3 xl:grid-cols-4">
             {rows.slice(0, shown).map((r) => {
-              const p = byId.get(r.product_id);
-              const dim = r.fit_score < 50;
+              const dim = !r.eligible;
               return (
                 <button
                   key={r.product_id}
@@ -151,9 +160,9 @@ export default function CataloguePage() {
                     <span className="absolute right-2.5 top-2.5 flex rounded-full bg-white p-0.5 shadow">
                       <FitRing score={r.fit_score} size={42} />
                     </span>
-                    {p && !p.in_stock && (
-                      <span className="absolute left-2.5 top-2.5 rounded-full bg-[var(--plum)] px-2.5 py-0.5 text-[11px] font-semibold text-white">
-                        Out of stock
+                    {!r.eligible && r.blocked_by && (
+                      <span className="absolute bottom-2.5 left-2.5 right-2.5 rounded-full bg-[var(--plum)]/90 px-2.5 py-0.5 text-center text-[10.5px] font-semibold text-white">
+                        {BLOCKED[r.blocked_by] ?? 'Not in feed'}
                       </span>
                     )}
                   </div>

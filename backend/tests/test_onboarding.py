@@ -20,7 +20,11 @@ def db():
     seed(session, force=True)
     yield session
     session.close()
-    os.unlink(path)
+    engine.dispose()
+    try:
+        os.unlink(path)
+    except OSError:
+        pass
 
 
 def test_riya_intent_is_a_weighted_score():
@@ -59,4 +63,6 @@ def test_price_signal_from_product_picks(db):
     assert dna.preferred_price == 349 and (dna.price_min, dna.price_max) == (299, 499)
     assert dna.niche == "Skincare" and dna.niche_shares["Skincare"] == 0.7
     assert dna.content_formats == ["routine", "review", "tutorial"]
-    assert dna.sources["niche"] == "Content history + hashtags + Q1"
+    # Growth creator with history: Q1 shapes formats, not niche; hashtags confirm the niche.
+    assert dna.sources["niche"] == "Fetched: content history + hashtags"
+    assert dna.sources["positioning"] == "Asked: Q4 + hashtags"

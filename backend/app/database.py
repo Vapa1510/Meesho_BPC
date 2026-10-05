@@ -45,7 +45,15 @@ def _add_missing_columns() -> None:
             "preferred_price": "INTEGER", "niche_shares": "JSON", "content_formats": "JSON",
             "positioning": "JSON", "secondary_intent": "VARCHAR(16)", "intent_separation": "FLOAT",
             "dna_sources": "JSON", "questions_asked": "INTEGER", "consented": "BOOLEAN DEFAULT 1",
+            "handle": "VARCHAR(40)",
         },
+        "feedback_events": {"source": "VARCHAR(16)"},
+        "recommendation_log": {
+            "source": "VARCHAR(16) DEFAULT 'personalised'",
+            "slate_id": "VARCHAR(32)",
+            "mode": "VARCHAR(16) DEFAULT 'personalised'",
+        },
+        "pitches": {"incentive": "VARCHAR(24)"},
     }
     with engine.begin() as conn:
         for table, columns in additions.items():

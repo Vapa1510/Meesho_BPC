@@ -9,6 +9,7 @@ import { useBrands } from '@/components/BrandContext';
 import { ProductImage, Star, Stat } from '@/components/ui';
 import { api, fmt } from '@/lib/api';
 import type { BrandOverview } from '@/lib/types';
+import { NMV_NOTE } from '@/lib/types';
 
 export default function BrandDashboard() {
   const { current, loading, error, revision } = useBrands();
@@ -29,7 +30,7 @@ export default function BrandDashboard() {
     <>
       <PageHeader
         title={current.brand}
-        description="Open a product to see which creators fit it, what they would earn you, and send an offer."
+        description="Brand view (Phase 2 extension). Open a product to see which creators fit it, what the match could be worth, and send an offer. Sample data."
         actions={
           <Link href="/brand/new" className="btn">
             List a product
@@ -40,10 +41,11 @@ export default function BrandDashboard() {
       {!data && !err && <Loading label="Loading portfolio" />}
 
       {data && (
-        <div className="space-y-6 px-6 pb-16 pt-5">
+        <div className="space-y-6 px-4 pb-16 pt-5 sm:px-6">
+          <p className="text-[11.5px] text-[var(--ink-3)]">{NMV_NOTE}</p>
           <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
             <Stat label="Products" value={data.products.length} />
-            <Stat label="NMV, last 30 days" value={`₹${fmt.compact(data.nmv_30d)}`} />
+            <Stat label="NMV, last 30 days (sample data)" value={`₹${fmt.compact(data.nmv_30d)}`} note="Net of returns; not revenue" />
             <Stat
               label="Offers sent"
               value={data.offers_sent}

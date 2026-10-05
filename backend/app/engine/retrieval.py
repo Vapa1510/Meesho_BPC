@@ -1,9 +1,11 @@
 """Stage 2 of the pipeline: narrow the eligible pool to a candidate set.
 
-With pgvector enabled this is a nearest-neighbour query over creator and product
-embeddings. Without it, the same ordering is approximated with a deterministic
-lexical similarity so the pipeline has identical shape in the demo and in
-production — only the precision of the similarity changes.
+MVP: candidates are ordered by a deterministic hashed bag-of-words similarity
+(plus same-category and momentum terms). It is explainable and needs no model
+download. USE_PGVECTOR=1 only reads the stored product vectors instead of
+recomputing them; it does not run a pgvector query. Production would swap
+pseudo_embedding() for a learned encoder and an ANN index (pgvector); the
+function signatures stay the same.
 """
 from __future__ import annotations
 

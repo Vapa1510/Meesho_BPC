@@ -41,11 +41,17 @@ function OfferCard({
         <p className="mt-3 rounded-xl bg-[var(--canvas)] px-3.5 py-2.5 text-[13px] leading-relaxed text-[var(--ink-2)]">
           “{pitch.message}”
         </p>
+        {pitch.incentive_label && (
+          <p className="mt-2 rounded-xl bg-[#fff6e8] px-3.5 py-2 text-[12.5px] text-[#7a4a00]">
+            <b>Fit Rewards:</b> {pitch.incentive_label}. Offered because the fit is {pitch.fit_score} (80+); paid on delivered
+            orders, net of returns.
+          </p>
+        )}
 
         <div className="mt-auto pt-4">
           {declining ? (
             <div>
-              <p className="mb-1.5 text-[12px] text-[var(--ink-3)]">Tell the brand why:</p>
+              <p className="mb-1.5 text-[12px] text-[var(--ink-3)]">Decline (with reason): the brand sees it, and your feed learns from it.</p>
               <div className="flex flex-wrap gap-1.5">
                 {REJECTION_REASONS.map((r) => (
                   <button
@@ -68,7 +74,7 @@ function OfferCard({
                 Accept offer
               </button>
               <button className="btn-quiet" disabled={busy} onClick={() => setDeclining(true)}>
-                Decline
+                Decline (with reason)
               </button>
             </div>
           )}

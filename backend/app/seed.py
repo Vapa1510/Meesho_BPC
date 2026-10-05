@@ -590,35 +590,82 @@ def generate_filler(count: int = FILLER_COUNT, start_index: int = 100) -> list[d
     return rows
 
 
-def seed(db: Session, *, force: bool = False) -> dict[str, int]:
+DEMO_CREATOR_ID = "C013"          # Riya Kapoor, the deck's persona (slides 7, 8, 18)
+
+
+def _wipe(db: Session) -> None:
+    """Delete every row, children first, so a reset works on Postgres too."""
+    from .models import (
+        EvaluationSnapshot, FeedbackEvent, OrderEvent, Pitch, RecommendationLog, SimulatedProfile,
+    )
+    for model in (OrderEvent, Pitch, FeedbackEvent, RecommendationLog, EvaluationSnapshot,
+                  SimulatedProfile, Interaction, Product, Creator):
+        db.query(model).delete()
+    db.commit()
+
+
+def _seed_deck_creators(db: Session) -> int:
+    """Riya, built from her deck answers through the onboarding code path."""
+    from .engine import onboarding as ob
+
+    added = 0
+    products = {p.product_id: p for p in db.scalars(select(Product)).all()}
+    for handle, answers in ob.DECK_ANSWERS.items():
+        creator_id = ob.HANDLE_IDS[handle]
+        if db.get(Creator, creator_id) is not None:
+            continue
+        fetched = ob.DEMO_PROFILES[handle]
+        dna = ob.build_dna(answers, fetched, products)
+        creator = Creator(creator_id=creator_id)
+        ob.apply_dna(creator, dna, fetched, handle)
+        db.add(creator)
+        added += 1
+    db.commit()
+    return added
+
+
+def seed(db: Session, *, force: bool = False, filler_count: int | None = None) -> dict[str, int]:
+    """Load the demo data.
+
+    Idempotent: anything missing (a creator or product added in a later version)
+    is inserted, and nothing a demo created is overwritten. `force=True` wipes
+    every table first, which is what POST /demo/reset uses to return the
+    prototype to the exact state the deck shows.
+    """
     if force:
-        for model in (Interaction, Product, Creator):
-            db.query(model).delete()
-        db.commit()
+        _wipe(db)
 
-    if db.scalar(select(Creator).limit(1)) is not None:
-        return {"creators": 0, "products": 0, "interactions": 0, "skipped": 1}
+    existing_creators = {c for (c,) in db.execute(select(Creator.creator_id)).all()}
+    existing_products = {p for (p,) in db.execute(select(Product.product_id)).all()}
+    first_run = not existing_creators
 
+    added_c = 0
     for row in CREATORS:
-        db.add(Creator(**row))
+        if row["creator_id"] not in existing_creators:
+            db.add(Creator(**row))
+            added_c += 1
 
-    catalogue = PRODUCTS + generate_filler()
+    catalogue = PRODUCTS + generate_filler(FILLER_COUNT if filler_count is None else filler_count)
+    added_p = 0
     for row in catalogue:
+        if row["product_id"] in existing_products:
+            continue
         row = {**row, "brand": row.get("brand") or BRAND_BY_ID.get(row["product_id"], "Independent Seller")}
         product = Product(**row)
         product.embedding = product_vector(product)
         db.add(product)
-
-    for row in INTERACTIONS:
-        db.add(Interaction(**row))
-
+        added_p += 1
     db.commit()
-    return {
-        "creators": len(CREATORS),
-        "products": len(catalogue),
-        "interactions": len(INTERACTIONS),
-        "skipped": 0,
-    }
+
+    added_i = 0
+    if first_run:
+        for row in INTERACTIONS:
+            db.add(Interaction(**row))
+            added_i += 1
+        db.commit()
+
+    added_c += _seed_deck_creators(db)
+    return {"creators": added_c, "products": added_p, "interactions": added_i, "skipped": int(not (added_c or added_p))}
 
 
 def main() -> None:

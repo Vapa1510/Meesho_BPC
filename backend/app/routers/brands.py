@@ -15,7 +15,8 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from ..database import get_db
-from ..engine import matching, pipeline
+from ..engine import learning, matching, pipeline, rewards
+from ..engine.eligibility import category_return_medians, filter_eligible, RULES
 from ..engine.retrieval import product_vector
 from ..imagery import PACKS, image_for, pick_shape, render_svg
 from ..models import Creator, FeedbackEvent, Pitch, Product
@@ -55,6 +56,8 @@ def _pitch_out(pitch: Pitch, product: Product, creator: Creator) -> PitchOut:
         reason=pitch.reason,
         created_at=pitch.created_at.isoformat(),
         responded_at=pitch.responded_at.isoformat() if pitch.responded_at else None,
+        incentive=pitch.incentive,
+        incentive_label=rewards.INCENTIVES.get(pitch.incentive or ""),
     )
 
 
@@ -279,7 +282,30 @@ def send_pitch(payload: PitchIn, db: Session = Depends(get_db)):
             detail=f"{creator.name} already has an offer for this product ({existing.status}).",
         )
 
+    # The brand side's rules apply to the API, not only to the screen: an
+    # unsolicited offer goes only to a creator who covers the category and
+    # whom every hard gate lets through.
+    catalogue = list(db.scalars(select(Product)).all())
+    events = list(db.scalars(select(FeedbackEvent).where(FeedbackEvent.creator_id == creator.creator_id)).all())
+    adj = learning.build_adjustments(events, {p.product_id: p for p in catalogue})
+    if not matching.in_niche(creator, product):
+        raise HTTPException(status_code=422, detail=f"{creator.name} is not reachable: {matching.BLOCK_LABELS['off_niche']}")
+    stage1 = filter_eligible(
+        creator, [product], suppressed=adj.suppressed_products,
+        return_medians=category_return_medians(catalogue),
+    )
+    if not stage1.eligible:
+        rule = next((r for r in RULES if stage1.rejected.get(r)), "category")
+        raise HTTPException(status_code=422, detail=f"{creator.name} is not reachable: {matching.BLOCK_LABELS.get(rule, rule)}")
+
     fit = pipeline.score_pair(db, creator, product).fit_score
+    incentive = (payload.incentive or "").strip() or None
+    if incentive in ("none",):
+        incentive = None
+    if incentive:
+        problem = rewards.incentive_allowed(incentive, fit, product)
+        if problem:
+            raise HTTPException(status_code=422, detail=problem)
     pitch = Pitch(
         product_id=product.product_id,
         creator_id=creator.creator_id,
@@ -287,6 +313,7 @@ def send_pitch(payload: PitchIn, db: Session = Depends(get_db)):
         message=payload.message.strip()
         or f"{product.brand} would like you to feature {product.title}.",
         fit_score=fit,
+        incentive=incentive,
     )
     db.add(pitch)
     db.commit()

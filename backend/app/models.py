@@ -33,6 +33,9 @@ class Creator(Base):
 
     creator_id: Mapped[str] = mapped_column(String(16), primary_key=True)
     name: Mapped[str] = mapped_column(String(120))
+    # The connected profile handle (e.g. riya.glows). Onboarding the same handle
+    # again updates this creator instead of creating a duplicate.
+    handle: Mapped[str | None] = mapped_column(String(40), nullable=True, index=True)
     tier_label: Mapped[str] = mapped_column(String(40), default="Growth Creator")
     followers: Mapped[int] = mapped_column(Integer, default=0)
 
@@ -212,8 +215,11 @@ class FeedbackEvent(Base):
     creator_id: Mapped[str] = mapped_column(ForeignKey("creators.creator_id"), index=True)
     product_id: Mapped[str] = mapped_column(ForeignKey("products.product_id"), index=True)
 
-    action: Mapped[str] = mapped_column(String(16))      # promote | save | skip | click | impression
+    action: Mapped[str] = mapped_column(String(16))      # promote | save | skip | click | impression | order
     reason: Mapped[str | None] = mapped_column(String(48), nullable=True)
+    # Which feed the acted-on pick came from: personalised | generic | fallback.
+    # Needed for the interleaved pilot test (slide 11, weeks 5-6).
+    source: Mapped[str | None] = mapped_column(String(16), nullable=True)
     served_score: Mapped[float | None] = mapped_column(Float, nullable=True)
     model_version: Mapped[str | None] = mapped_column(String(32), nullable=True)
     created_at: Mapped[dt.datetime] = mapped_column(DateTime, default=_now)
@@ -232,6 +238,11 @@ class RecommendationLog(Base):
     signals: Mapped[dict] = mapped_column(JSON, default=dict)
     reason_codes: Mapped[list] = mapped_column(JSON, default=list)
     model_version: Mapped[str] = mapped_column(String(32))
+    # Pick-source logging for the pilot: personalised | generic | fallback.
+    source: Mapped[str] = mapped_column(String(16), default="personalised")
+    # One id per served slate, so an interleaved slate can be scored as a unit.
+    slate_id: Mapped[str | None] = mapped_column(String(32), nullable=True, index=True)
+    mode: Mapped[str] = mapped_column(String(16), default="personalised")
     created_at: Mapped[dt.datetime] = mapped_column(DateTime, default=_now)
 
 
@@ -294,8 +305,31 @@ class Pitch(Base):
     message: Mapped[str] = mapped_column(String(400), default="")
     fit_score: Mapped[int] = mapped_column(Integer, default=0)   # as shown to the brand
     status: Mapped[str] = mapped_column(String(12), default="pending")  # pending|accepted|declined
+    # Fit Rewards attached to the offer: sample | conversion_bonus | early_access.
+    # Only allowed on fit-qualified pairs (fit >= 80), see engine/rewards.py.
+    incentive: Mapped[str | None] = mapped_column(String(24), nullable=True)
     reason: Mapped[str | None] = mapped_column(String(48), nullable=True)
     created_at: Mapped[dt.datetime] = mapped_column(DateTime, default=_now)
     responded_at: Mapped[dt.datetime | None] = mapped_column(DateTime, nullable=True)
 
     __table_args__ = (Index("ix_pitch_pair", "creator_id", "product_id"),)
+
+
+class OrderEvent(Base):
+    """An order attributed to a creator's promotion.
+
+    In production these arrive from Meesho's order service. The prototype lets
+    the demo post them, so the loop Click -> Order -> NMV -> Fit Rewards can be
+    shown end to end. NMV counts delivered orders net of returns and
+    cancellations; it is not revenue or profit.
+    """
+
+    __tablename__ = "order_events"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    creator_id: Mapped[str] = mapped_column(ForeignKey("creators.creator_id"), index=True)
+    product_id: Mapped[str] = mapped_column(ForeignKey("products.product_id"), index=True)
+    status: Mapped[str] = mapped_column(String(12))        # placed | delivered | returned | cancelled
+    amount: Mapped[int] = mapped_column(Integer, default=0)
+    fit_score: Mapped[int] = mapped_column(Integer, default=0)   # fit when the creator promoted it
+    created_at: Mapped[dt.datetime] = mapped_column(DateTime, default=_now)

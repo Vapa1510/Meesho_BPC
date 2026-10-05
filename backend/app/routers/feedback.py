@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from ..database import get_db
 from ..engine import learning
-from ..models import FeedbackEvent, Product, get_or_create_interaction
+from ..models import FeedbackEvent, Product, RecommendationLog, get_or_create_interaction
 from ..schemas import REJECTION_REASONS, FeedbackIn, FeedbackOut
 from .creators import get_creator_or_404
 
@@ -30,18 +30,28 @@ def record_event(
     action: str,
     reason: str | None = None,
     served_score: float | None = None,
+    source: str | None = None,
 ) -> FeedbackEvent:
     """Write one creator action and keep the interactions aggregate in step.
 
     Shared by the feedback endpoint and by offer responses, so an accepted or
     declined brand offer teaches the ranker exactly what a tap on a card does.
     """
+    if source is None:
+        # Credit the action to the feed that last served this pick.
+        source = db.scalar(
+            select(RecommendationLog.source)
+            .where(RecommendationLog.creator_id == creator_id, RecommendationLog.product_id == product_id)
+            .order_by(RecommendationLog.id.desc())
+            .limit(1)
+        )
     event = FeedbackEvent(
         creator_id=creator_id,
         product_id=product_id,
         action=action,
         reason=reason,
         served_score=served_score,
+        source=source,
     )
     db.add(event)
     interaction = get_or_create_interaction(db, creator_id, product_id)
@@ -65,10 +75,12 @@ def submit_feedback(payload: FeedbackIn, db: Session = Depends(get_db)):
     if product is None:
         raise HTTPException(status_code=404, detail=f"product {payload.product_id} not found")
 
-    if payload.action == "skip" and payload.reason and payload.reason not in REJECTION_REASONS:
+    # "Skip (with reason)": every skip says why, because each reason moves a
+    # different lever in the ranker and is what the brand gets to see.
+    if payload.action == "skip" and payload.reason not in REJECTION_REASONS:
         raise HTTPException(
             status_code=422,
-            detail=f"reason must be one of {list(REJECTION_REASONS)}",
+            detail=f"a skip needs a reason, one of {list(REJECTION_REASONS)}",
         )
 
     event = record_event(
@@ -76,8 +88,9 @@ def submit_feedback(payload: FeedbackIn, db: Session = Depends(get_db)):
         creator_id=payload.creator_id,
         product_id=payload.product_id,
         action=payload.action,
-        reason=payload.reason,
+        reason=payload.reason if payload.action == "skip" else None,
         served_score=payload.served_score,
+        source=payload.source,
     )
 
     # Show the creator what their tap actually changed.

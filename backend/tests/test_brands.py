@@ -38,7 +38,11 @@ def env():
     app.dependency_overrides[get_db] = override
     yield TestClient(app), Session
     app.dependency_overrides.clear()
-    os.unlink(path)
+    engine.dispose()
+    try:
+        os.unlink(path)
+    except OSError:
+        pass
 
 
 def test_same_pair_same_score_both_sides(env):
@@ -111,11 +115,30 @@ def test_offer_lifecycle_feeds_the_ranker(env):
 
 def test_decline_reason_reaches_the_brand(env):
     client, _ = env
-    pid = client.post("/pitches", json={"product_id": "P019", "creator_id": "C006"}).json()["id"]
+    pid = client.post("/pitches", json={"product_id": "P009", "creator_id": "C004"}).json()["id"]
     client.post(f"/pitches/{pid}/respond", json={"action": "decline", "reason": "too_expensive"})
-    fb = client.get("/product/P019/matches").json()["feedback"]
+    fb = client.get("/product/P009/matches").json()["feedback"]
     assert fb["skip_reasons"] == {"too_expensive": 1}
     assert fb["offers_declined"] == 1
+
+
+def test_offers_only_reach_creators_the_brand_view_lists(env):
+    """The API enforces the same reachability rules the brand screen shows."""
+    client, _ = env
+    off_niche = client.post("/pitches", json={"product_id": "P019", "creator_id": "C006"})   # serum to a makeup creator
+    assert off_niche.status_code == 422 and "not reachable" in off_niche.json()["detail"]
+    out_of_band = client.post("/pitches", json={"product_id": "P019", "creator_id": "C12345"})  # ₹2,499 to a ₹200-700 band
+    assert out_of_band.status_code == 422
+
+
+def test_fit_rewards_on_offers_need_fit_80(env):
+    client, _ = env
+    # Vitamin C Serum to Aditi scores 90: a brand-funded sample is allowed.
+    ok = client.post("/pitches", json={"product_id": "P001", "creator_id": "C12345", "incentive": "sample"})
+    assert ok.status_code == 201 and ok.json()["incentive"] == "sample"
+    # Ceramide Moisturiser to Ananya scores 66: no Fit Rewards below 80.
+    low = client.post("/pitches", json={"product_id": "P009", "creator_id": "C005", "incentive": "sample"})
+    assert low.status_code == 422 and "80" in low.json()["detail"]
 
 
 def test_every_product_has_a_working_image(env):

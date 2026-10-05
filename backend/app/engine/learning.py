@@ -34,7 +34,9 @@ REASON_EFFECTS: dict[str, dict[str, float]] = {
     "angle_unclear":      {},                            # content issue, not fit
 }
 
-POSITIVE_EFFECTS = {"promote": 0.09, "save": 0.04, "click": 0.01}
+# A delivered order is the strongest positive signal the loop gets (slide 5:
+# Click -> Order -> NMV -> Learn); it lifts that category for this creator.
+POSITIVE_EFFECTS = {"promote": 0.09, "save": 0.04, "click": 0.01, "order": 0.06}
 
 HALF_LIFE_DAYS = 45.0
 

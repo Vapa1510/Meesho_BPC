@@ -37,6 +37,8 @@ export interface Creator {
   positioning?: Record<string, number> | null;
   dna_sources?: Record<string, string> | null;
   questions_asked?: number | null;
+  handle?: string | null;
+  synthetic?: boolean;
 }
 
 export interface OnboardingAnswers {
@@ -94,6 +96,22 @@ export interface Signal {
   contribution: number;
 }
 
+export interface Driver {
+  label: string;
+  score: number;
+  weight: number;
+  points: number;
+}
+
+export interface Check {
+  rule: string;
+  label: string;
+  value: string;
+  passed: boolean;
+}
+
+export type PickSource = 'personalised' | 'generic' | 'fallback';
+
 export interface Recommendation {
   product_id: string;
   rank: number;
@@ -120,6 +138,13 @@ export interface Recommendation {
   penalty_returns?: number;
   cell?: string;
   notes: string[];
+  top_drivers: Driver[];
+  checks: Check[];
+  eligible: boolean;
+  blocked_by: string | null;
+  rewards: string[];
+  fit_qualified: boolean;
+  source: PickSource;
 }
 
 export interface PipelineStats {
@@ -137,6 +162,10 @@ export interface RecommendationsResponse {
   recommendations: Recommendation[];
   pipeline: PipelineStats;
   learning_notes: string[];
+  top_k: number;
+  mode: 'personalised' | 'interleaved' | 'generic';
+  slate_id: string;
+  latency_ms: number;
 }
 
 export interface Product {
@@ -368,6 +397,8 @@ export interface Pitch {
   reason: string | null;
   created_at: string;
   responded_at: string | null;
+  incentive: string | null;
+  incentive_label: string | null;
 }
 
 export interface BrandSummary {
@@ -429,4 +460,108 @@ export const INTENT_LABEL: Record<string, string> = {
   reach: 'Trend-led', revenue: 'Commerce-led', brand: 'Brand-led',
   trend: 'Trend-led', commerce: 'Commerce-led',
 };
+/** One Top-K rule everywhere (slide 7): Starter-5, Top 8, Top 4. */
 export const TOP_K_BY_SCALE: Record<string, number> = { Emerging: 5, Growth: 8, Established: 4 };
+export const TOP_K_LABEL: Record<string, string> = {
+  Emerging: 'Starter-5',
+  Growth: 'Top 8',
+  Established: 'Top 4',
+};
+
+/** Riya Kapoor: the deck's persona on slides 7, 8 and 18. */
+export const DEMO_CREATOR_ID = 'C013';
+
+/** Fit Rewards only on fit-qualified picks (slides 5 and 12). */
+export const FIT_QUALIFIED = 80;
+
+export const INCENTIVES: { value: string; label: string; note: string }[] = [
+  { value: 'sample', label: 'Brand-funded sample', note: 'Fit 80+ only' },
+  { value: 'conversion_bonus', label: 'Conversion bonus', note: 'Paid on delivered orders, net of returns' },
+  { value: 'early_access', label: 'Early access', note: 'Rising products only' },
+];
+
+/** How each of the seven signals is computed, in the order the deck lists them. */
+export const SIGNAL_HELP: Record<string, string> = {
+  audience:
+    'Age and city-tier overlap between her audience and the product’s target. Audience data comes from attributed buyers and consented platform/API analytics; this prototype uses sample profiles.',
+  creator: 'Her category shares from content history (Q1 when history is thin) plus tag overlap.',
+  intent: 'Her intent scores (from Q2 + Q3) × the product’s trend, commerce and brand roles.',
+  product: '0.6 × quality (rating, reviews, seller rating, returns) + 0.4 × price comfort inside her band.',
+  commerce: '0.46 × conversion + 0.30 × orders (30 days) + 0.24 × NMV (30 days).',
+  trend: 'Trend score × stage multiplier. Seeded here; search and category momentum in production.',
+  brand: 'Overlap of her positioning (Q4 picks, checked against hashtags) with the product’s price tier and tags.',
+};
+
+/** NMV, said the same way everywhere. */
+export const NMV_NOTE =
+  'NMV is net of cancellations, returns and undelivered orders; it is not revenue or profit.';
+
+/* --------------------------------------------------------- rewards, metrics */
+export interface OrderRow {
+  id: number;
+  creator_id: string;
+  product_id: string;
+  title: string;
+  status: string;
+  amount: number;
+  fit_score: number;
+  fit_qualified: boolean;
+  created_at: string;
+}
+
+export interface Rewards {
+  creator_id: string;
+  archetype: { name: string; quote: string; needs: string; reward: string; intent: string };
+  fit_threshold: number;
+  delivered_fit_orders: number;
+  returned_orders: number;
+  fit_nmv: number;
+  earned: { reward: string; basis: string; count: number }[];
+  next_step: string;
+  promoted: {
+    product_id: string;
+    title: string;
+    price: number;
+    fit_score: number;
+    fit_qualified: boolean;
+    delivered: number;
+    returned: number;
+  }[];
+  orders: OrderRow[];
+  note: string;
+}
+
+export interface TrustMetric {
+  metric: string;
+  formula: string;
+  value: number | null;
+  target: string;
+  ok: boolean | null;
+  unit: 'share' | 'count' | 'ms';
+  evidence: string;
+}
+
+export interface Trust {
+  picks_shown: number;
+  slates_served: number;
+  metrics: TrustMetric[];
+  note: string;
+}
+
+export interface PilotArm {
+  slates: number;
+  shown: Record<string, number>;
+  positive_actions: Record<string, number>;
+  pick_rate: Record<string, number | null>;
+  personalised_wins: number;
+  generic_wins: number;
+  ties: number;
+  win_rate: number | null;
+}
+
+export interface Pilot {
+  real: PilotArm;
+  synthetic: PilotArm;
+  gate: string;
+  note: string;
+}

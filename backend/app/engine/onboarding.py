@@ -130,6 +130,37 @@ def intent_summary(scores: dict[str, float]) -> dict:
     }
 
 
+# ------------------------------------------------------------------ hashtags
+HASHTAG_TOPICS = {
+    "skincare": "Skincare", "skin": "Skincare", "serum": "Skincare", "sunscreen": "Skincare",
+    "makeup": "Makeup", "lip": "Makeup", "lipstick": "Makeup", "kajal": "Makeup",
+    "hair": "Haircare", "haircare": "Haircare",
+    "bodycare": "Personal Care", "fragrance": "Personal Care", "grooming": "Personal Care",
+}
+HASHTAG_POSITIONS = {
+    "budget": "budget", "affordable": "budget", "cheap": "budget",
+    "premium": "premium", "luxury": "premium",
+    "routine": "routine", "daily": "routine",
+    "glowup": "trendy", "trending": "trendy", "viral": "trendy",
+}
+
+
+def hashtag_signals(hashtags: list[str]) -> tuple[dict[str, float], dict[str, float]]:
+    """Topic and positioning hints read from a creator's hashtags."""
+    topics: dict[str, float] = {}
+    positions: dict[str, float] = {}
+    for raw in hashtags:
+        tag = str(raw).lower().lstrip("#")
+        for key, topic in HASHTAG_TOPICS.items():
+            if key in tag:
+                topics[topic] = topics.get(topic, 0.0) + 1.0
+                break
+        for key, pos in HASHTAG_POSITIONS.items():
+            if key in tag:
+                positions[pos] = positions.get(pos, 0.0) + 1.0
+    return topics, positions
+
+
 # ------------------------------------------------------------------ DNA
 @dataclass
 class DNA:
@@ -179,9 +210,27 @@ def build_dna(answers: dict, fetched: dict, products_by_id: dict) -> DNA:
         shares = {k: v / sum(topic_counts.values()) for k, v in topic_counts.items()} or {"Skincare": 1.0}
     total = sum(shares.values())
     shares = {k: round(v / total, 2) for k, v in sorted(shares.items(), key=lambda kv: -kv[1])}
+    tag_topics, tag_positions = hashtag_signals(fetched.get("hashtags") or [])
+    if not history and not topic_counts and tag_topics:
+        # Nothing fetched or asked about topics: fall back to the hashtags.
+        tot = sum(tag_topics.values())
+        shares = {k: round(v / tot, 2) for k, v in sorted(tag_topics.items(), key=lambda kv: -kv[1])}
     niche = next((k for k in shares if k != "Other"), "Skincare")
-    sources["niche"] = "Content history + hashtags + Q1" if history else "Q1"
-    sources["content"] = "Q1" if picks1 else "Content history"
+    # Every value is tagged with where it came from, and the tag says only what
+    # was actually used. Hashtags are a cross-check on the niche when history
+    # exists, and the source when nothing else is available.
+    hashtags_agree = bool(tag_topics) and max(tag_topics, key=tag_topics.get) == niche
+    if history and q1_weight and topic_counts:
+        sources["niche"] = "Fetched + asked: content history + Q1"
+    elif history:
+        sources["niche"] = "Fetched: content history + hashtags" if hashtags_agree else "Fetched: content history"
+    elif topic_counts:
+        sources["niche"] = "Asked: Q1"
+    elif tag_topics:
+        sources["niche"] = "Fetched: hashtags"
+    else:
+        sources["niche"] = "Default (ask later)"
+    sources["content"] = "Asked: Q1" if picks1 else "Fetched: content history"
 
     # Product + Price signals (Q4).
     picks4 = [products_by_id[p] for p in (answers.get("q4") or []) if p in products_by_id][:3]
@@ -193,14 +242,23 @@ def build_dna(answers: dict, fetched: dict, products_by_id: dict) -> DNA:
         for p in picks4:
             for k, v in product_positioning(p).items():
                 pos[k] = pos.get(k, 0.0) + v / len(picks4)
-        sources["price"] = "Q4 picks"
-        sources["positioning"] = "Q4 picks + hashtags"
+        sources["price"] = "Asked: Q4 picks"
+        top_pos = max(pos, key=pos.get)
+        sources["positioning"] = (
+            "Asked: Q4 + hashtags" if top_pos in tag_positions else "Asked: Q4 picks"
+        )
     else:
         lo, hi = fetched.get("price_range", (200, 700))
         preferred = int((lo + hi) / 2)
-        pos = fetched.get("positioning") or {"mid": 1.0}
-        sources["price"] = "Order history"
-        sources["positioning"] = "Order history + hashtags"
+        pos = fetched.get("positioning") or (
+            {k: round(v / sum(tag_positions.values()), 2) for k, v in tag_positions.items()}
+            if tag_positions else {"mid": 1.0}
+        )
+        sources["price"] = "Fetched: order history"
+        sources["positioning"] = (
+            "Fetched: order history" if fetched.get("positioning")
+            else "Fetched: hashtags" if tag_positions else "Default (ask later)"
+        )
 
     # Audience: analytics first, Q6 only when missing.
     if fetched.get("audience"):
@@ -210,13 +268,19 @@ def build_dna(answers: dict, fetched: dict, products_by_id: dict) -> DNA:
     elif answers.get("q6") in Q6_AGES:
         age_min, age_max = Q6_AGES[answers["q6"]]
         tiers = answers.get("q6_tiers") or ["T2", "T3"]
-        sources["audience"] = "Q6"
+        sources["audience"] = "Asked: Q6"
     else:
         age_min, age_max, tiers = 18, 30, ["T2", "T3"]
         sources["audience"] = "Default (ask later)"
 
     intent = intent_summary(intent_scores({**answers, "behaviour": fetched.get("behaviour")}))
-    sources["intent"] = "Q2 + Q3" + (" + Q5" if answers.get("q5") else "") + (" + behaviour" if fetched.get("behaviour") else "")
+    asked_intent = [q.upper() for q in ("q2", "q3", "q5") if answers.get(q)]
+    if asked_intent:
+        sources["intent"] = "Asked: " + " + ".join(asked_intent) + (" + fetched behaviour" if fetched.get("behaviour") else "")
+    elif fetched.get("behaviour"):
+        sources["intent"] = "Fetched: promotion behaviour"
+    else:
+        sources["intent"] = "Default (ask later)"
     sources["maturity"] = "Fetched: profile"
 
     asked = sum(1 for q in ("q1", "q2", "q3", "q4", "q5", "q6", "q7") if answers.get(q))
@@ -234,18 +298,18 @@ def build_dna(answers: dict, fetched: dict, products_by_id: dict) -> DNA:
 # comes from Meesho's creator, content and order services.
 DEMO_PROFILES = {
     "riya.glows": {
-        "name": "Riya Kapoor", "followers": 25_000, "city": "Varanasi",
+        "name": "Riya Kapoor", "followers": 25_000, "city": "Varanasi", "engagement_rate": 0.04,
         "audience": {"age_min": 18, "age_max": 30, "tiers": ["T2", "T3"]},
         "content_history": {"Skincare": 0.7, "Makeup": 0.2, "Other": 0.1},
         "hashtags": ["#skincareroutine", "#budgetskincare", "#glowup"],
         "posts": 64,
     },
     "naina.starts": {
-        "name": "Naina Verma", "followers": 6_200, "city": "Gaya",
+        "name": "Naina Verma", "followers": 6_200, "city": "Gaya", "engagement_rate": 0.07,
         "audience": None, "content_history": {}, "hashtags": ["#makeuplook"], "posts": 9,
     },
     "zara.luxe": {
-        "name": "Zara Khan", "followers": 210_000, "city": "Lucknow",
+        "name": "Zara Khan", "followers": 210_000, "city": "Lucknow", "engagement_rate": 0.035,
         "audience": {"age_min": 22, "age_max": 34, "tiers": ["T1", "T2"]},
         "content_history": {"Makeup": 0.6, "Skincare": 0.3, "Other": 0.1},
         "hashtags": ["#luxurymakeup", "#premiumbeauty"], "posts": 410,
@@ -253,3 +317,64 @@ DEMO_PROFILES = {
         "price_range": (450, 1800), "positioning": {"premium": 0.6, "mid": 0.4},
     },
 }
+
+
+# The three demo profiles keep one creator id each, so onboarding the same
+# handle twice updates that creator instead of creating a duplicate.
+HANDLE_IDS = {"riya.glows": "C013", "naina.starts": "C014", "zara.luxe": "C015"}
+
+# Riya's answers exactly as slides 7, 8 and 18 show them. The seed builds her
+# Creator DNA from these through the same code path as the onboarding screen.
+DECK_ANSWERS = {
+    "riya.glows": {
+        "q1": ["skincare_routine", "product_review", "makeup_tutorial"],
+        "q2": "definitely",
+        "q3": ["sells", "niche", "audience", "trending"],
+        "q4": ["P003", "P007", "P001"],
+    },
+}
+
+NICHE_SUBS = {
+    "Skincare": ["serum", "moisturiser", "sunscreen", "acne", "brightening", "routine"],
+    "Makeup": ["lips", "eyes", "base", "kajal", "tint"],
+    "Haircare": ["shampoo", "oil", "serum", "frizz"],
+    "Personal Care": ["body", "fragrance", "grooming"],
+}
+GOAL_FOR_INTENT = {"trend": "reach", "commerce": "revenue", "brand": "brand"}
+TIER_LABEL = {"Established": "Established Creator", "Growth": "Growth Creator", "Emerging": "Emerging Creator"}
+
+
+def apply_dna(creator, dna: DNA, fetched: dict, handle: str | None, name: str | None = None) -> None:
+    """Write a Creator DNA onto a Creator row (new or existing)."""
+    scores = dna.intent["scores"]
+    subs: list[str] = []
+    for s in NICHE_SUBS.get(dna.niche, []) + list(dna.content_formats):
+        if s not in subs:
+            subs.append(s)
+    creator.handle = handle
+    creator.name = name or fetched.get("name", "New Creator")
+    creator.tier_label = TIER_LABEL[dna.scale]
+    creator.followers = int(fetched.get("followers", 0))
+    creator.niche = dna.niche
+    creator.sub_niches = subs
+    creator.bio = " ".join(h.strip("#") for h in fetched.get("hashtags", [])) or f"{dna.niche.lower()} creator"
+    creator.audience_age_min = dna.audience_age_min
+    creator.audience_age_max = dna.audience_age_max
+    creator.audience_tiers = dna.audience_tiers
+    creator.price_min = dna.price_min
+    creator.price_max = dna.price_max
+    creator.goal = GOAL_FOR_INTENT[dna.intent["primary"]]
+    creator.intent_trend = int(round(scores["trend"] * 100))
+    creator.intent_commerce = int(round(scores["commerce"] * 100))
+    creator.intent_brand = int(round(scores["brand"] * 100))
+    creator.avoid_categories = dna.avoid_categories
+    creator.preferred_price = dna.preferred_price
+    creator.niche_shares = dna.niche_shares
+    creator.content_formats = dna.content_formats
+    creator.positioning = dna.positioning
+    creator.secondary_intent = dna.intent["secondary"]
+    creator.intent_separation = dna.intent["separation"]
+    creator.dna_sources = dna.sources
+    creator.questions_asked = dna.questions_asked
+    creator.engagement_rate = float(fetched.get("engagement_rate", 0.04))
+    creator.consented = True

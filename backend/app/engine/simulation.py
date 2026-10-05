@@ -274,10 +274,15 @@ def run_round(
     latent: LatentProfile,
     round_number: int,
     top_k: int = 5,
+    mode: str = "personalised",
 ) -> RoundResult:
-    """One cycle: serve a slate, react to it, write the reactions back."""
+    """One cycle: serve a slate, react to it, write the reactions back.
+
+    mode="interleaved" serves the pilot's mixed feed (slide 11, weeks 5-6), so
+    the synthetic creators produce a match-quality win rate as a mechanism check.
+    """
     rng = random.Random(latent.seed + round_number)
-    result = recommend(db, creator, category="bpc", top_k=top_k)
+    result = recommend(db, creator, category="bpc", top_k=top_k, mode=mode)
 
     served: list[dict] = []
     counts = {"promote": 0, "save": 0, "skip": 0}
@@ -298,6 +303,7 @@ def run_round(
                 reason=reason,
                 served_score=rec.fit_score,
                 model_version=result.model_version,
+                source=rec.source,
             )
         )
 

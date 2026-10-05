@@ -126,3 +126,96 @@ def filter_eligible(
 
     ratio = len(eligible) / len(catalogue) if catalogue else 0.0
     return EligibilityResult(eligible=eligible, rejected=rejected, pool_ratio=round(ratio, 3), return_medians=medians)
+
+
+# --------------------------------------------------------------------------
+# The same rules, written out for one pair so the app can show them.
+# --------------------------------------------------------------------------
+RULE_LABELS = {
+    "price_range": "price is outside this creator's price window",
+    "stock_serviceable": "out of stock or not serviceable",
+    "quality_threshold": "rating is below the quality bar",
+    "return_rate": "returns are above the category median",
+    "policy_compliant": "listing has a policy or claims flag",
+    "creator_excluded": "creator excludes this category",
+    "audience_fit": "built for a different audience",
+    "already_promoted": "creator has already promoted it",
+}
+
+
+def explain_checks(
+    creator: Creator,
+    product: Product,
+    return_medians: dict[str, float] | None = None,
+    suppressed: set[str] | None = None,
+) -> tuple[list[dict], str | None]:
+    """Every hard gate for one creator-product pair, in the order Stage 1 runs them.
+
+    Returns (checks, first_failed_rule). Each check is
+    {"rule", "label", "value", "passed"} so the drawer can show exactly why a
+    product was allowed through, or which rule kept it out of the feed.
+    """
+    from .scoring import audience_fit
+
+    lo, hi = _price_window(creator)
+    medians = return_medians or {}
+    median = medians.get(product.category.lower())
+    trusted = product.review_count >= MIN_REVIEWS_FOR_RATING
+    rating_used = product.rating if trusted else product.seller_rating
+    aud = audience_fit(creator, product)
+
+    checks = [
+        {
+            "rule": "stock_serviceable",
+            "label": "In stock and serviceable",
+            "value": "yes" if (product.in_stock and product.serviceable) else "no",
+            "passed": bool(product.in_stock and product.serviceable),
+        },
+        {
+            "rule": "quality_threshold",
+            "label": f"Rating ≥ {MIN_RATING}" + ("" if trusted else " (seller rating, under 50 reviews)"),
+            "value": f"{rating_used:.1f}★",
+            "passed": passes_quality(product),
+        },
+        {
+            "rule": "return_rate",
+            "label": "Returns ≤ category median" + ("" if trusted else " (no history yet)"),
+            "value": f"{product.return_rate:.0%}" + (f" vs {median:.0%}" if median is not None else ""),
+            "passed": (not trusted) or median is None or product.return_rate <= median + 1e-9,
+        },
+        {
+            "rule": "policy_compliant",
+            "label": "No policy or claims flag",
+            "value": "clear" if product.policy_compliant else "flagged",
+            "passed": bool(product.policy_compliant),
+        },
+        {
+            "rule": "price_range",
+            "label": f"Price inside window ₹{lo:.0f}–₹{hi:.0f} (band ₹{creator.price_min}–₹{creator.price_max})",
+            "value": f"₹{product.price}",
+            "passed": lo <= product.price <= hi,
+        },
+        {
+            "rule": "creator_excluded",
+            "label": "Category not excluded by the creator",
+            "value": product.category,
+            "passed": product.category.lower() not in {c.lower() for c in (creator.avoid_categories or [])},
+        },
+        {
+            "rule": "audience_fit",
+            "label": f"Audience fit ≥ {MIN_AUDIENCE_FIT:.0f}",
+            "value": f"{aud:.0f}",
+            "passed": aud >= MIN_AUDIENCE_FIT,
+        },
+        {
+            "rule": "already_promoted",
+            "label": "Not already promoted by this creator",
+            "value": "promoted" if suppressed and product.product_id in suppressed else "new to her",
+            "passed": not (suppressed and product.product_id in suppressed),
+        },
+    ]
+    by_rule = {c["rule"]: c for c in checks}
+    # Report the first failure in the order Stage 1 applies the rules, so the
+    # reason matches the funnel counts.
+    failed = next((r for r in RULES if r in by_rule and not by_rule[r]["passed"]), None)
+    return checks, failed

@@ -31,7 +31,11 @@ def db():
     seed(session, force=True)
     yield session
     session.close()
-    os.unlink(path)
+    engine.dispose()
+    try:
+        os.unlink(path)
+    except OSError:
+        pass
 
 
 @pytest.fixture()

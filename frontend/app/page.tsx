@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 
+import { DemoGuide } from '@/components/DemoGuide';
 import { ProductImage } from '@/components/ui';
 
 const SAMPLE = ['P001', 'P003', 'P015', 'P011'];
@@ -46,21 +47,24 @@ function Side({
 
 export default function Landing() {
   return (
-    <div className="px-6 pb-20 pt-10">
-      <section className="overflow-hidden rounded-[28px] px-8 py-12 md:px-14" style={{ background: 'var(--grad)' }}>
+    <div className="pb-20">
+      <DemoGuide />
+      <div className="px-4 pt-6 sm:px-6">
+      <section className="overflow-hidden rounded-[28px] px-6 py-10 sm:px-8 sm:py-12 md:px-14" style={{ background: 'var(--grad)' }}>
         <div className="grid items-center gap-10 md:grid-cols-[1.2fr_1fr]">
           <div>
             <p className="text-[12.5px] font-bold uppercase tracking-[0.1em] text-[var(--signal)]">
-              Creator × Product Fit Engine
+              Creator × Product Fit Engine · Meesho DICE S3 · Team Pro, IIT (BHU)
             </p>
-            <h1 className="mt-3 text-[40px] font-extrabold leading-[1.1] tracking-[-0.035em] text-[var(--plum)] md:text-[52px]">
+            <h1 className="mt-3 text-[34px] font-extrabold leading-[1.1] tracking-[-0.035em] text-[var(--plum)] sm:text-[40px] md:text-[52px]">
               The right product
               <br />
               for the right creator.
             </h1>
-            <p className="mt-4 max-w-[48ch] text-[15px] leading-relaxed text-[var(--plum)]/80">
-              One engine, two sides. Creators see products that fit their audience and goals. Brands see
-              the creators that fit their products, and what that match could earn.
+            <p className="mt-4 max-w-[52ch] text-[15px] leading-relaxed text-[var(--plum)]/80">
+              From thousands of BPC listings to a few worth promoting, each explained. It plugs into Meesho Creator Club
+              and its AI toolkit, and adds creator-specific fit, reasons, Fit Rewards and a feedback loop. Sample data,
+              not Meesho data.
             </p>
           </div>
           <div className="grid grid-cols-2 gap-3">
@@ -93,7 +97,7 @@ export default function Landing() {
         <Side
           href="/brand"
           tone="#7B4FE0"
-          kicker="I'm a brand"
+          kicker="Brand view · Phase 2 extension"
           title="Find creators who fit your product"
           points={[
             'Every creator scored against your product, with a projection',
@@ -106,9 +110,9 @@ export default function Landing() {
 
       <section className="mt-10 grid gap-4 md:grid-cols-3">
         {[
-          ['1', 'Filter', 'Hard rules first: stock, price band, quality, niche, policy.'],
-          ['2', 'Score', 'Seven signals weighted by the creator’s cell in a 3×3 matrix (scale × intent): audience, niche, intent, product, commerce, trend, brand.'],
-          ['3', 'Learn', 'Every promote, skip and offer answer re-ranks the next list.'],
+          ['1', 'Filter first', 'Hard checks before any scoring: stock, price window, rating, returns, claims, audience.'],
+          ['2', 'Score seven signals', 'Audience, Niche, Intent, Product, Commerce, Trend, Brand, weighted by the creator’s cell in a 3×3 matrix (scale × intent).'],
+          ['3', 'Learn and reward fit', 'Every promote, save or skip (with reason) re-ranks the next list. Fit Rewards pay on delivered fit-pick orders.'],
         ].map(([n, t, d]) => (
           <div key={n} className="rounded-2xl border border-[var(--line)] bg-white p-5">
             <span className="flex h-8 w-8 items-center justify-center rounded-full bg-[var(--signal-wash)] text-[13px] font-bold text-[var(--signal)]">
@@ -122,8 +126,9 @@ export default function Landing() {
 
       <p className="mt-8 text-center text-[12.5px] text-[var(--ink-3)]">
         Want to see inside? <Link className="font-semibold text-[var(--signal)]" href="/lab/pipeline">Open the engine lab</Link>:
-        the filter funnel, a creator simulation, and ranking metrics.
+        the filter funnel, the trust metrics against the deck&apos;s targets, and the interleaved pilot test.
       </p>
+      </div>
     </div>
   );
 }

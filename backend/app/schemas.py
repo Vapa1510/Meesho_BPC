@@ -6,6 +6,7 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 Action = Literal["impression", "click", "save", "promote", "skip"]
+Source = Literal["personalised", "generic", "fallback"]
 
 REJECTION_REASONS = (
     "too_expensive",
@@ -54,6 +55,8 @@ class CreatorOut(BaseModel):
     positioning: dict | None = None
     dna_sources: dict | None = None
     questions_asked: int | None = None
+    handle: str | None = None
+    synthetic: bool = False             # generated in the Engine lab; never shown to brands
 
 
 class OnboardingAnswers(BaseModel):
@@ -131,6 +134,20 @@ SIGNAL_LABELS = {
 }
 
 
+class CheckOut(BaseModel):
+    rule: str
+    label: str
+    value: str
+    passed: bool
+
+
+class DriverOut(BaseModel):
+    label: str
+    score: float
+    weight: float
+    points: float
+
+
 class RecommendationOut(BaseModel):
     product_id: str
     rank: int
@@ -157,6 +174,17 @@ class RecommendationOut(BaseModel):
     penalty_saturation: float = 0.0
     penalty_returns: float = 0.0
     cell: str = ""
+    # The 2-3 signals that added the most points: "Why this product?"
+    top_drivers: list[DriverOut] = []
+    # Every hard gate for this pair, and whether the product is in the feed's pool.
+    checks: list[CheckOut] = []
+    eligible: bool = True
+    blocked_by: str | None = None
+    # Fit Rewards this pick can earn (fit >= 80 only).
+    rewards: list[str] = []
+    fit_qualified: bool = False
+    # Which feed it came from. Hidden from the creator in interleaved mode.
+    source: str = "personalised"
 
 
 class PipelineStats(BaseModel):
@@ -174,6 +202,10 @@ class RecommendationsOut(BaseModel):
     recommendations: list[RecommendationOut]
     pipeline: PipelineStats
     learning_notes: list[str]
+    top_k: int = 5
+    mode: str = "personalised"
+    slate_id: str = ""
+    latency_ms: float = 0.0
 
 
 class RankRequest(BaseModel):
@@ -186,8 +218,9 @@ class FeedbackIn(BaseModel):
     creator_id: str
     product_id: str
     action: Action
-    reason: str | None = None
+    reason: str | None = None            # required for a skip
     served_score: float | None = None
+    source: Source | None = None         # which feed the pick came from
 
 
 class FeedbackOut(BaseModel):
@@ -272,6 +305,8 @@ class PitchIn(BaseModel):
     product_id: str
     creator_id: str
     message: str = Field(default="", max_length=400)
+    # Fit Rewards on the offer: sample | conversion_bonus | early_access (fit >= 80 only)
+    incentive: str | None = None
 
 
 class PitchRespondIn(BaseModel):
@@ -291,6 +326,8 @@ class PitchOut(BaseModel):
     reason: str | None
     created_at: str
     responded_at: str | None
+    incentive: str | None = None
+    incentive_label: str | None = None
 
 
 class BrandOut(BaseModel):
@@ -312,3 +349,38 @@ class BrandOverviewOut(BaseModel):
     offers_declined: int
     acceptance_rate: float | None
     nmv_30d: int
+
+
+# ------------------------------------------------------------ orders + rewards
+class OrderIn(BaseModel):
+    """An order attributed to a creator's promotion (from the order service in production)."""
+
+    creator_id: str
+    product_id: str
+    status: Literal["placed", "delivered", "returned", "cancelled"]
+
+
+class OrderOut(BaseModel):
+    id: int
+    creator_id: str
+    product_id: str
+    title: str
+    status: str
+    amount: int
+    fit_score: int
+    fit_qualified: bool
+    created_at: str
+
+
+class RewardsOut(BaseModel):
+    creator_id: str
+    archetype: dict
+    fit_threshold: int
+    delivered_fit_orders: int
+    returned_orders: int
+    fit_nmv: int
+    earned: list[dict]
+    next_step: str
+    promoted: list[dict]
+    orders: list[OrderOut]
+    note: str

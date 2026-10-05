@@ -16,6 +16,7 @@ import {
 
 import { api, session } from '@/lib/api';
 import type { Creator } from '@/lib/types';
+import { DEMO_CREATOR_ID } from '@/lib/types';
 
 interface CreatorStore {
   creators: Creator[];
@@ -48,6 +49,8 @@ export function CreatorProvider({ children }: { children: ReactNode }) {
         if (existing && list.some((c) => c.creator_id === existing)) return existing;
         const stored = session.get();
         if (stored && list.some((c) => c.creator_id === stored)) return stored;
+        // Someone arriving from a QR code in the deck lands on Riya, the deck's persona.
+        if (list.some((c) => c.creator_id === DEMO_CREATOR_ID)) return DEMO_CREATOR_ID;
         return list[0]?.creator_id ?? null;
       });
     } catch (err) {

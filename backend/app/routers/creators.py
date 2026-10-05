@@ -15,22 +15,6 @@ from ..schemas import CreatorOut, CreatorUpdateIn, IntentScores, OnboardingAnswe
 
 router = APIRouter(tags=["creators"])
 
-# Editing the primary intent on the profile page (the creator correcting what
-# the engine understood). Observed behaviour moves these later.
-GOAL_INTENT_SEED = {
-    "reach":   {"trend": 84, "commerce": 58, "brand": 52},
-    "revenue": {"trend": 70, "commerce": 86, "brand": 50},
-    "brand":   {"trend": 58, "commerce": 56, "brand": 82},
-}
-
-NICHE_SUBS = {
-    "Skincare": ["serum", "moisturiser", "sunscreen", "acne", "brightening", "routine"],
-    "Makeup": ["lips", "eyes", "base", "kajal", "tint"],
-    "Haircare": ["shampoo", "oil", "serum", "frizz"],
-    "Personal Care": ["body", "fragrance", "grooming"],
-}
-
-
 def to_out(creator: Creator) -> CreatorOut:
     return CreatorOut(
         creator_id=creator.creator_id,
@@ -65,6 +49,8 @@ def to_out(creator: Creator) -> CreatorOut:
         positioning=creator.positioning,
         dna_sources=creator.dna_sources,
         questions_asked=creator.questions_asked,
+        handle=creator.handle,
+        synthetic=(creator.handle or "").startswith("sim."),
     )
 
 
@@ -77,15 +63,17 @@ def get_creator_or_404(db: Session, creator_id: str) -> Creator:
 
 @router.get("/creators", response_model=list[CreatorOut])
 def list_creators(db: Session = Depends(get_db)):
-    return [to_out(c) for c in db.scalars(select(Creator)).all()]
+    """Riya (the deck's persona) first, then the rest in seed order."""
+    from ..seed import DEMO_CREATOR_ID
+
+    creators = list(db.scalars(select(Creator)).all())
+    creators.sort(key=lambda c: c.creator_id != DEMO_CREATOR_ID)
+    return [to_out(c) for c in creators]
 
 
 @router.get("/creator/{creator_id}", response_model=CreatorOut)
 def get_creator(creator_id: str, db: Session = Depends(get_db)):
     return to_out(get_creator_or_404(db, creator_id))
-
-
-GOAL_FOR_INTENT = {"trend": "reach", "commerce": "revenue", "brand": "brand"}
 
 
 def _products(db: Session) -> dict[str, Product]:
@@ -124,63 +112,79 @@ def preview(payload: OnboardingIn, db: Session = Depends(get_db)):
 
 @router.post("/creator/onboard", response_model=CreatorOut, status_code=201)
 def onboard(payload: OnboardingIn, db: Session = Depends(get_db)):
-    """Create a creator from a connected profile plus the indirect answers."""
+    """Create (or update) a creator from a connected profile plus the indirect answers.
+
+    The same handle always maps to the same creator, so onboarding Riya again
+    updates Riya instead of adding a second Riya to every brand's list.
+    """
     if not payload.consent:
         raise HTTPException(status_code=422, detail="consent is required to build a Creator DNA")
     fetched = ob.DEMO_PROFILES.get(payload.handle, {"followers": 0, "name": payload.name or "New Creator"})
     dna = ob.build_dna(payload.answers.model_dump(exclude_none=True), fetched, _products(db))
-    scores = dna.intent["scores"]
-    tier = {"Established": "Established Creator", "Growth": "Growth Creator", "Emerging": "Emerging Creator"}[dna.scale]
-    creator = Creator(
-        creator_id=f"C{uuid.uuid4().hex[:6].upper()}",
-        name=payload.name or fetched.get("name", "New Creator"),
-        tier_label=tier,
-        followers=int(fetched.get("followers", 0)),
-        niche=dna.niche,
-        sub_niches=NICHE_SUBS.get(dna.niche, []) + dna.content_formats,
-        bio=" ".join(h.strip("#") for h in fetched.get("hashtags", [])) or f"{dna.niche.lower()} creator",
-        audience_age_min=dna.audience_age_min,
-        audience_age_max=dna.audience_age_max,
-        audience_tiers=dna.audience_tiers,
-        price_min=dna.price_min,
-        price_max=dna.price_max,
-        goal=GOAL_FOR_INTENT[dna.intent["primary"]],
-        intent_trend=int(round(scores["trend"] * 100)),
-        intent_commerce=int(round(scores["commerce"] * 100)),
-        intent_brand=int(round(scores["brand"] * 100)),
-        avoid_categories=dna.avoid_categories,
-        preferred_price=dna.preferred_price,
-        niche_shares=dna.niche_shares,
-        content_formats=dna.content_formats,
-        positioning=dna.positioning,
-        secondary_intent=dna.intent["secondary"],
-        intent_separation=dna.intent["separation"],
-        dna_sources=dna.sources,
-        questions_asked=dna.questions_asked,
-        consented=True,
-    )
-    db.add(creator)
+
+    creator = db.scalar(select(Creator).where(Creator.handle == payload.handle)) if payload.handle else None
+    if creator is None:
+        creator_id = ob.HANDLE_IDS.get(payload.handle) or f"C{uuid.uuid4().hex[:6].upper()}"
+        creator = db.get(Creator, creator_id) or Creator(creator_id=creator_id)
+        db.add(creator)
+    ob.apply_dna(creator, dna, fetched, payload.handle, payload.name)
     db.commit()
     return to_out(creator)
+
+
+INTENT_FOR_GOAL = {"reach": "trend", "revenue": "commerce", "brand": "brand"}
+
+
+def correct_intent(creator: Creator, goal: str) -> bool:
+    """Make `goal` the primary intent without throwing away the measured scores.
+
+    The chosen intent swaps scores with the current primary, so the separation
+    the onboarding measured is kept. Choosing the intent that is already primary
+    changes nothing. Returns True when the scores changed.
+    """
+    target = INTENT_FOR_GOAL.get(goal)
+    if target is None:
+        raise HTTPException(status_code=422, detail="goal must be one of reach, revenue, brand")
+    scores = {"trend": creator.intent_trend, "commerce": creator.intent_commerce, "brand": creator.intent_brand}
+    current = primary_intent(creator)
+    creator.goal = goal
+    if current == target:
+        return False
+    scores[current], scores[target] = scores[target], scores[current]
+    # Break an exact tie in favour of the creator's choice.
+    if any(v >= scores[target] for k, v in scores.items() if k != target):
+        scores[target] = min(100, max(scores.values()) + 1)
+    creator.intent_trend, creator.intent_commerce, creator.intent_brand = (
+        scores["trend"], scores["commerce"], scores["brand"],
+    )
+    return True
 
 
 @router.patch("/creator/{creator_id}", response_model=CreatorOut)
 def update_creator(
     creator_id: str, payload: CreatorUpdateIn, db: Session = Depends(get_db)
 ):
+    """The creator correcting her DNA on the Profile page.
+
+    Only the fields that are sent change. Feedback never rewrites the DNA;
+    this endpoint is the creator doing it herself.
+    """
     creator = get_creator_or_404(db, creator_id)
-    if payload.goal:
-        creator.goal = payload.goal
-        seed = GOAL_INTENT_SEED.get(payload.goal)
-        if seed:
-            creator.intent_trend = seed["trend"]
-            creator.intent_commerce = seed["commerce"]
-            creator.intent_brand = seed["brand"]
-    if payload.price_min is not None:
-        creator.price_min = payload.price_min
-    if payload.price_max is not None:
-        creator.price_max = payload.price_max
-    if payload.avoid_categories is not None:
+    sources = dict(creator.dna_sources or {})
+    if payload.goal and correct_intent(creator, payload.goal):
+        sources["intent"] = "Corrected on Profile"
+    lo = payload.price_min if payload.price_min is not None else creator.price_min
+    hi = payload.price_max if payload.price_max is not None else creator.price_max
+    if lo > hi:
+        raise HTTPException(status_code=422, detail="price_min must not exceed price_max")
+    if (lo, hi) != (creator.price_min, creator.price_max):
+        creator.price_min, creator.price_max = lo, hi
+        if creator.preferred_price is not None and not (lo <= creator.preferred_price <= hi):
+            creator.preferred_price = int((lo + hi) / 2)
+        sources["price"] = "Corrected on Profile"
+    if payload.avoid_categories is not None and payload.avoid_categories != (creator.avoid_categories or []):
         creator.avoid_categories = payload.avoid_categories
+        sources["exclusions"] = "Corrected on Profile"
+    creator.dna_sources = sources
     db.commit()
     return to_out(creator)

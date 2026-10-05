@@ -13,9 +13,11 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react';
 
 import { PageHeader } from '@/components/AppShell';
 import { useCreators } from '@/components/CreatorContext';
+import { DemoGuide } from '@/components/DemoGuide';
+import { SourceTag } from '@/components/DnaSummary';
 import { api, imgSrc } from '@/lib/api';
 import type { DNA, FetchedProfile, OnboardingAnswers } from '@/lib/types';
-import { TOP_K_BY_SCALE } from '@/lib/types';
+import { TOP_K_LABEL } from '@/lib/types';
 
 type Step = 'connect' | 'q1' | 'q2' | 'q3' | 'q4' | 'q5' | 'q6' | 'q7' | 'dna';
 const HANDLES = [
@@ -53,11 +55,16 @@ function Ico({ k, size = 22, color = 'currentColor' }: { k: string; size?: numbe
   );
 }
 
+/** On a laptop the flow sits in a phone frame; on a real phone (a judge who
+ *  scanned the QR code) it is the screen itself, full width. */
 function Phone({ children, step, total, label }: { children: ReactNode; step: number; total: number; label: string }) {
   return (
-    <div id="phone" className="mx-auto w-[372px] rounded-[44px] bg-[#1f1a22] p-[10px] shadow-[0_24px_60px_-20px_rgba(81,14,68,0.45)]">
-      <div className="relative flex h-[740px] flex-col overflow-hidden rounded-[36px] bg-white">
-        <div className="flex items-center justify-between px-6 pt-3 text-[11px] font-semibold text-[var(--ink)]">
+    <div
+      id="phone"
+      className="mx-auto w-full rounded-[28px] border border-[var(--line)] bg-white sm:w-[372px] sm:rounded-[44px] sm:border-0 sm:bg-[#1f1a22] sm:p-[10px] sm:shadow-[0_24px_60px_-20px_rgba(81,14,68,0.45)]"
+    >
+      <div className="relative flex min-h-[620px] flex-col overflow-hidden rounded-[28px] bg-white sm:h-[740px] sm:rounded-[36px]">
+        <div className="hidden items-center justify-between px-6 pt-3 text-[11px] font-semibold text-[var(--ink)] sm:flex">
           <span>9:41</span>
           <span className="h-[22px] w-[96px] rounded-full bg-[#1f1a22]" />
           <span>5G ▮</span>
@@ -112,7 +119,8 @@ export default function OnboardPage() {
   const [answers, setAnswers] = useState<OnboardingAnswers>({});
   const [step, setStep] = useState<Step>('connect');
   const [dna, setDna] = useState<DNA | null>(null);
-  const [consent, setConsent] = useState(true);
+  // Consent is a clear, affirmative tap (DPDP Act 2023): the box starts unticked.
+  const [consent, setConsent] = useState(false);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
@@ -206,7 +214,7 @@ export default function OnboardPage() {
             <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--ink-3)]">Fetched automatically</p>
             <dl className="mt-2 space-y-1.5 text-[12px]">
               <div className="flex justify-between"><dt className="text-[var(--ink-3)]">Followers</dt><dd className="font-semibold">{(fetched.followers / 1000).toFixed(1).replace('.0', '')}K · {scale}</dd></div>
-              <div className="flex justify-between"><dt className="text-[var(--ink-3)]">Audience</dt><dd className="font-semibold">{fetched.audience ? `${fetched.audience.age_min}–${fetched.audience.age_max} · ${fetched.audience.tiers.join('/')}` : 'not enough data yet'}</dd></div>
+              <div className="flex justify-between gap-3"><dt className="text-[var(--ink-3)]" title="From attributed buyers and consented platform/API analytics">Audience</dt><dd className="font-semibold">{fetched.audience ? `${fetched.audience.age_min}–${fetched.audience.age_max} · ${fetched.audience.tiers.join('/')}` : 'not enough data yet'}</dd></div>
               <div className="flex justify-between"><dt className="text-[var(--ink-3)]">Content history</dt><dd className="font-semibold">{Object.keys(fetched.content_history).length ? Object.entries(fetched.content_history).map(([k, v]) => `${k} ${Math.round(v * 100)}%`).join(' · ') : `${fetched.posts} posts, too few`}</dd></div>
             </dl>
             <div className="mt-2 flex flex-wrap gap-1">{fetched.hashtags.map((t) => <span key={t} className="rounded-full bg-white px-2 py-0.5 text-[10.5px] text-[var(--ink-2)]">{t}</span>)}</div>
@@ -276,7 +284,7 @@ export default function OnboardPage() {
     };
     screen = (
       <>
-        <Q text="What matters most when you pick a product?" hint="Drag to rank, most important first." />
+        <Q text="What matters most when you pick a product?" hint="Use the arrows to rank, most important first." />
         <div className="space-y-2.5">
           {order.map((id, i) => (
             <div key={id} className={`flex items-center gap-3 rounded-2xl border px-3 py-3 ${i === 0 ? 'border-[var(--signal)] bg-[var(--signal-wash)]' : 'border-[var(--line-strong)]'}`}>
@@ -353,12 +361,14 @@ export default function OnboardPage() {
     );
   } else if (step === 'dna' && dna) {
     const sc = dna.intent.scores;
-    const top = TOP_K_BY_SCALE[dna.scale] ?? 5;
+    const top = TOP_K_LABEL[dna.scale] ?? 'Top 5';
     const rows: [string, string, string][] = [
+      ['Cell', `${dna.scale} × ${INTENT_NAME[dna.intent.primary]}-led`, 'Fetched tier + asked intent'],
       ['Niche', Object.entries(dna.niche_shares).filter(([k]) => k !== 'Other').map(([k, v]) => `${k} ${Math.round(v * 100)}%`).join(' · '), dna.sources.niche],
       ['Content', dna.content_formats.join(' · ') || '—', dna.sources.content],
       ['Price', `~₹${dna.preferred_price} preferred · ₹${dna.price_min}–${dna.price_max} range`, dna.sources.price],
       ['Audience', `${dna.audience_age_min}–${dna.audience_age_max} · ${dna.audience_tiers.join('/')}`, dna.sources.audience],
+      ['Positioning', Object.entries(dna.positioning).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k[0].toUpperCase()}${k.slice(1)} ${v.toFixed(2).replace(/^0/, '')}`).join(' · '), dna.sources.positioning],
     ];
     screen = (
       <>
@@ -382,20 +392,20 @@ export default function OnboardPage() {
         <div className="mt-3 space-y-2">
           {rows.map(([k, v, s]) => (
             <div key={k} className="rounded-xl border border-[var(--line)] px-3 py-2">
-              <div className="flex items-center justify-between"><span className="text-[11px] font-semibold text-[var(--ink-3)]">{k}</span>
-                <span className={`rounded-full px-2 py-0.5 text-[9.5px] font-semibold ${/^Q|Q\d/.test(s) && !s.startsWith('Fetched') ? 'bg-[var(--signal-wash)] text-[var(--signal)]' : 'bg-[#efe6f6] text-[var(--plum)]'}`}>{s}</span></div>
+              <div className="flex items-center justify-between gap-2"><span className="text-[11px] font-semibold text-[var(--ink-3)]">{k}</span>
+                <SourceTag source={s} /></div>
               <p className="text-[12.5px] font-semibold">{v}</p>
             </div>
           ))}
         </div>
         <label className="mt-3 flex items-start gap-2 text-[11px] text-[var(--ink-2)]">
           <input type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)} className="mt-0.5 accent-[#E8195F]" />
-          I agree to Meesho using my profile and aggregated audience data to recommend products. I can edit this DNA any time.
+          I agree to Meesho using my profile and aggregated audience data to recommend products. I can edit this DNA any time. (Required: nothing is saved without it.)
         </label>
         <div className="mt-auto flex gap-2 pt-3">
           <button onClick={() => setStep('connect')} className="rounded-full border border-[var(--line-strong)] px-4 py-3 text-[13px] font-semibold">Edit</button>
           <button onClick={() => void finish()} disabled={!consent || busy} className="flex-1 rounded-full bg-[var(--signal)] py-3 text-[14px] font-semibold text-white disabled:opacity-40">
-            See my Top {top}
+            {consent ? `See my ${top}` : 'Tick consent to continue'}
           </button>
         </div>
       </>
@@ -418,10 +428,11 @@ export default function OnboardPage() {
 
   return (
     <>
-      <PageHeader title="Onboarding" description="A few indirect questions, and only the ones the data cannot answer." />
-      {err && <p className="mx-6 rounded-xl bg-[var(--signal-wash)] px-4 py-3 text-[13px] text-[var(--plum)]">{err}</p>}
-      <div className="grid gap-8 px-6 pb-16 pt-5 lg:grid-cols-[1fr_400px]">
-        <section className="panel h-fit p-6">
+      <DemoGuide />
+      <PageHeader title="Onboarding" description="A few indirect questions, and only the ones Meesho's data cannot answer. It never asks a creator to label her own goal." />
+      {err && <p className="mx-4 rounded-xl bg-[var(--signal-wash)] px-4 py-3 text-[13px] text-[var(--plum)] sm:mx-6">{err}</p>}
+      <div className="grid gap-6 px-4 pb-16 pt-5 sm:px-6 lg:grid-cols-[1fr_400px] lg:gap-8">
+        <section className="panel order-2 h-fit p-5 sm:p-6 lg:order-1">
           <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-[var(--signal)]">{step === 'connect' || step === 'dna' ? 'Step' : SIGNAL_OF[step]}</p>
           <h2 className="mt-1 text-[22px] font-bold tracking-[-0.02em] text-[var(--plum)]">{explain[step]?.[0]}</h2>
           <p className="mt-2 max-w-[520px] text-[14px] leading-relaxed text-[var(--ink-2)]">{explain[step]?.[1]}</p>
@@ -434,7 +445,9 @@ export default function OnboardPage() {
             ))}
           </ol>
         </section>
-        <Phone step={pos} total={total} label={qLabel}>{screen}</Phone>
+        <div className="order-1 lg:order-2">
+          <Phone step={pos} total={total} label={qLabel}>{screen}</Phone>
+        </div>
       </div>
     </>
   );
